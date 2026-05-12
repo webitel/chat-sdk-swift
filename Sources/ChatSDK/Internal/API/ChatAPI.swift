@@ -32,4 +32,8 @@ internal protocol ChatAPI: AnyObject {
         pushToken: String,
         pushTokenType: PushTokenType
     ) async throws
+    
+    func sendAction(
+        action: MessageAction
+    ) async throws
 }

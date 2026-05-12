@@ -8,7 +8,7 @@
 import Foundation
 
 
-internal struct SendMessageRequestDto: Encodable {
+internal struct SendTextMessageRequestDto: Encodable {
     
     let body: String?
     let send_id: String
@@ -16,11 +16,80 @@ internal struct SendMessageRequestDto: Encodable {
     
     init(
         target: MessageTarget,
-        options: MessageOptions
+        text: String,
+        sendId: String,
     ) {
-        
-        self.body = options.text
-        self.send_id = options.sendId
+        self.body = text
+        self.send_id = sendId
+        self.to = TargetDto(target)
+    }
+}
+
+
+internal struct SendLocationRequestDto: Encodable {
+    
+    let name: String
+    let address: String
+    let latitude: Double
+    let longitude: Double
+    let send_id: String
+    let to: TargetDto
+    
+    init(
+        target: MessageTarget,
+        name: String,
+        address: String,
+        latitude: Double,
+        longitude: Double,
+        sendId: String,
+    ) {
+        self.name = name
+        self.address = address
+        self.latitude = latitude
+        self.longitude = longitude
+        self.send_id = sendId
+        self.to = TargetDto(target)
+    }
+}
+
+
+internal struct SendContactRequestDto: Encodable {
+    
+    let name: String
+    let phone_number: String?
+    let email: String?
+    let send_id: String
+    let to: TargetDto
+    
+    init(
+        target: MessageTarget,
+        name: String,
+        phoneNumber: String?,
+        email: String?,
+        sendId: String,
+    ) {
+        self.name = name
+        self.phone_number = phoneNumber
+        self.email = email
+        self.send_id = sendId
+        self.to = TargetDto(target)
+    }
+}
+
+
+internal struct SendAttachmentsRequestDto: Encodable {
+    
+    let body: String?
+    let send_id: String
+    let to: TargetDto
+    
+    init(
+        target: MessageTarget,
+        text: String,
+        sendId: String,
+    ) {
+        self.body = text
+        self.send_id = sendId
         self.to = TargetDto(target)
     }
 }

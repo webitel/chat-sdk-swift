@@ -9,23 +9,19 @@ import Foundation
 
 
 /// Options used when sending a message.
-public struct MessageOptions: Hashable, Codable {
+public struct MessageOptions {
 
     /// Text content of the message.
-    public let text: String?
+    public var content: SendContent
 
     /// Client-generated identifier used to match sent messages.
     public let sendId: String
 
     public init(
-        text: String?,
+        content: SendContent,
         sendId: String = UUID().uuidString
-    ) throws {
-        guard let text, !text.isEmpty else {
-            throw ChatError.emptyMessage
-        }
-
-        self.text = text
+    ) {
+        self.content = content
         self.sendId = sendId
     }
 }

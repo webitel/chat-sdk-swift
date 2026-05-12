@@ -11,7 +11,7 @@ import Foundation
 internal struct ParticipantDto: Codable {
     let id: String
     let contact: ContactDto
-    let role: String
+    let role: String?
 }
 
 
@@ -20,7 +20,7 @@ internal extension ParticipantDto {
         Participant(
             id: id,
             contact: contact.toDomain(),
-            role: ParticipantRole(rawValueOrDefault: role)
+            role: ParticipantRole(rawValueOrDefault: role ?? "")
         )
     }
 }

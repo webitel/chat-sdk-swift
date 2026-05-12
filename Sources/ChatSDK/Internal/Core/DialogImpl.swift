@@ -50,6 +50,16 @@ internal final class DialogImpl: Dialog {
     }
     
     
+    func sendAction(_ action: MessageAction, completion: @escaping (Result<Void, ChatError>) -> Void) {
+        client.sendAction(action, completion: completion)
+    }
+    
+    
+    func sendAction(_ action: MessageAction) async throws {
+        try await client.sendAction(action)
+    }
+    
+    
     func addObserver(_ observer: any ChatEventObserver) {
         client.addDialogObserver(dialogId: id, observer: observer)
     }

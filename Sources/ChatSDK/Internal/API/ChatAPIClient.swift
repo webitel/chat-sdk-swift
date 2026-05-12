@@ -15,6 +15,9 @@ internal class ChatAPIClient: ChatAPI {
     private let context: ClientContext
     
     private let sendTextPath = "/api/v1/messages/text"
+    private let sendContactPath = "/api/v1/messages/contact"
+    private let sendLocationPath = "/api/v1/messages/location"
+    private let sendActionPath = "api/v1/messages/interactive"
     private let dialogsPath = "/api/v1/threads"
     private let contactsPath = "/api/v1/contacts"
     private let registerPath = "/api/v1/auth/devices"
@@ -129,6 +132,23 @@ internal class ChatAPIClient: ChatAPI {
             pushToken,
             pushTokenType
         ) else {
+            throw ChatError.invalidURL
+        }
+        
+        _ = try await perform(request) {
+            try self.parseRegisterResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+    
+    
+    func sendAction(
+        action: MessageAction
+    ) async throws {
+        
+        guard let request = buildSendActionRequest(action: action) else {
             throw ChatError.invalidURL
         }
         
@@ -280,35 +300,168 @@ internal class ChatAPIClient: ChatAPI {
         target: MessageTarget,
         options: MessageOptions
     ) -> URLRequest? {
-        
-        guard let url = buildURL(path: sendTextPath) else {
-            return nil
-        }
-        
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue(
-            "application/json",
-            forHTTPHeaderField: "Content-Type"
-        )
-        
-        headerProvider.commonHeaders().forEach {
-            urlRequest.setValue($1, forHTTPHeaderField: $0)
-        }
-        
-        do {
-            let body = SendMessageRequestDto(
+
+        guard
+            let endpoint = buildSendMessageComponents(
                 target: target,
                 options: options
             )
-            
-            urlRequest.httpBody = try jsonEncoder.encode(body)
-            
-        } catch {
+
+        else {
             return nil
         }
-        
-        return urlRequest
+
+        var request = URLRequest(url: endpoint.url)
+        request.httpMethod = "POST"
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            request.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        request.httpBody = endpoint.body
+
+        return request
+    }
+
+
+    private func buildSendMessageComponents(
+        target: MessageTarget,
+        options: MessageOptions
+    ) -> RequestComponents? {
+        switch options.content {
+            case .text(let content):
+                guard let url = buildURL(path: sendTextPath) else {
+                    return nil
+                }
+
+                let dto = SendTextMessageRequestDto(
+                    target: target,
+                    text: content.text,
+                    sendId: options.sendId
+                )
+
+                return RequestComponents(
+                    url: url,
+                    body: try? jsonEncoder.encode(dto)
+                )
+
+            case .attachments:
+                // TODO: Implement attachments sending
+                return nil
+
+            case .contact(let content):
+                guard let url = buildURL(path: sendContactPath) else {
+                    return nil
+                }
+                
+                let dto = SendContactRequestDto(
+                    target: target,
+                    name: content.name,
+                    phoneNumber: content.phone,
+                    email: content.email,
+                    sendId: options.sendId
+                )
+
+                return RequestComponents(
+                    url: url,
+                    body: try? jsonEncoder.encode(dto)
+                )
+
+            case .location(let content):
+                guard let url = buildURL(path: sendLocationPath) else {
+                    return nil
+                }
+
+                let dto = SendLocationRequestDto(
+                    target: target,
+                    name: content.name,
+                    address: content.address,
+                    latitude: content.latitude,
+                    longitude: content.longitude,
+                    sendId: options.sendId
+                )
+
+                return RequestComponents(
+                    url: url,
+                    body: try? jsonEncoder.encode(dto)
+                )
+
+            case .composite(let content):
+                guard let url = buildURL(path: sendTextPath) else {
+                    return nil
+                }
+
+                let dto = SendAttachmentsRequestDto(
+                    target: target,
+                    text: content.text,
+                    sendId: options.sendId
+                )
+
+                return RequestComponents(
+                    url: url,
+                    body: try? jsonEncoder.encode(dto)
+                )
+        }
+    }
+    
+    
+    private func buildSendActionRequest(
+        action: MessageAction
+    ) -> URLRequest? {
+        guard let components = buildSendActionComponents(
+            action: action
+        ) else {
+            return nil
+        }
+
+        var request = URLRequest(url: components.url)
+        request.httpMethod = "POST"
+        request.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            request.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        request.httpBody = components.body
+        return request
+    }
+
+
+    private func buildSendActionComponents(
+        action: MessageAction
+    ) -> RequestComponents? {
+
+        switch action {
+            case .buttonClick(let action):
+                guard let url = buildURL(
+                    path: "\(sendActionPath)/\(action.messageId)/callback"
+                ) else {
+                    return nil
+                }
+
+                let body = ActionRequestDto(
+                    buttonCode: action.buttonId,
+                    callbackData: action.data
+                )
+
+                return RequestComponents(
+                    url: url,
+                    body: try? jsonEncoder.encode(body)
+                )
+        }
+    }
+    
+    
+    private struct RequestComponents {
+        let url: URL
+        let body: Data?
     }
     
     

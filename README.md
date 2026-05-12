@@ -101,7 +101,10 @@ chatClient.getDialogs(request) { result in
 
 ```swift
 let target: MessageTarget = .dialog(id: "dialogId")
-let options = try MessageOptions(text: "Hello")
+let options = MessageOptions(
+    content: .text("Hello!"),
+    sendId: sendId
+)
 
 chatClient.sendMessage(to: target, options: options) { result in
     switch result {

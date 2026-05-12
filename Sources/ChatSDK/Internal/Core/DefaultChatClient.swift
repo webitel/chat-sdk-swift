@@ -300,6 +300,29 @@ internal class DefaultChatClient: ChatClient {
     }
     
     
+    func sendAction(_ action: MessageAction, completion: @escaping (Result<Void, ChatError>) -> Void) {
+        Task {
+            do {
+                try await self.sendAction(action)
+                
+                completion(.success(Void()))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+    
+    
+    func sendAction(_ action: MessageAction) async throws {
+        try await performWithAuthRetry {
+
+            try await self.apiProvider.sendAction(action: action)
+        }
+    }
+    
+    
     func addEventObserver(_ observer: any ChatEventObserver) {
         hub.addGlobalObserver(observer)
     }

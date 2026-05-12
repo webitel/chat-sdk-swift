@@ -25,10 +25,8 @@ public struct Message: Hashable, Codable {
     /// Sender of the message
     public let from: Participant
 
-    /// Text content of the message
-    ///
-    /// May be nil when message contains only attachments
-    public let text: String?
+    /// Message content.
+    public let content: MessageContent
 
     /// Client-generated request ID
     public let sendId: String?
@@ -36,29 +34,24 @@ public struct Message: Hashable, Codable {
     /// Indicates whether message is outgoing
     public let isOutgoing: Bool
 
-    /// Attachments metadata
-    public let attachments: [MessageAttachment]
-
     public init(
         id: String,
         dialogId: String,
         createdAt: Date,
         editedAt: Date,
         from: Participant,
-        text: String?,
+        content: MessageContent,
         sendId: String? = nil,
         isOutgoing: Bool,
-        attachments: [MessageAttachment] = []
     ) {
         self.id = id
         self.dialogId = dialogId
         self.createdAt = createdAt
         self.editedAt = editedAt
         self.from = from
-        self.text = text
+        self.content = content
         self.sendId = sendId
         self.isOutgoing = isOutgoing
-        self.attachments = attachments
     }
 }
 

@@ -160,6 +160,29 @@ public protocol ChatClient {
         pushToken: String,
         pushTokenType: PushTokenType
     ) async throws
+    
+    
+    /// Sends a user action related to a message.
+    ///
+    /// Typically used for interactive message actions
+    /// such as keyboard button taps.
+    ///
+    /// - Parameter action: Action to be performed
+    ///
+    func sendAction(
+        _ action: MessageAction,
+        completion: @escaping (Result<Void, ChatError>) -> Void
+    )
+    
+    
+    /// Sends a user action using async/await.
+    ///
+    /// - Parameter action: Action to be performed
+    ///
+    /// - Throws: `ChatError` if operation fails.
+    func sendAction(
+        _ action: MessageAction
+    ) async throws
 
     
     /// Adds an observer for chat events (messages, dialogs, typing, etc.).
