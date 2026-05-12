@@ -127,6 +127,25 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     }
     
     
+    private func sendAck(eventId: String) {
+        logger.debug("Send ACK for eventId=\(eventId)")
+
+        let payload: [String: Any] = [
+            "type": "ack",
+            "event_id": eventId
+        ]
+
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let jsonString = String(data: data, encoding: .utf8) {
+            socket?.send(.string(jsonString)) { error in
+                if let error {
+                    self.logger.error("Error send ACK: \(error)")
+                }
+            }
+        }
+    }
+    
+    
     private func tryOpenStream() {
         var shouldStartListening = false
         syncConnectQueue.sync {
@@ -261,6 +280,11 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
                 handleDisconnected(payload)
                 
             case .message:
+                if let eventId = json["id"] as? String,
+                    !eventId.isEmpty {
+                    sendAck(eventId: eventId)
+                }
+                
                 handleMessageEvent(payload)
                 
             case .ack:
