@@ -3,21 +3,23 @@
 ## Sending Messages
 
 Messages can be sent in two ways:
-- via a dialog instance: dialog.sendMessage(...)  
-- via the client: chatClient.sendMessage(...) (with an explicit target)  
+- via a dialog instance: `dialog.sendMessage(...)`  
+- via the client: `chatClient.sendMessage(...)` (with an explicit target)  
 
-After a successful send, the server returns the messageId of the created message.
+After a successful send, the server returns the `messageId` of the created message.
 
 If realtime is active, the same message will also be delivered via events.
 
 
-## Tracking outgoing messages (sendId)
-To correctly update UI state (e.g. “pending → delivered”), you can provide a sendId — a client-generated unique identifier.
+## Tracking Outgoing Messages (`sendId`)
 
-This sendId will be included in the message received via realtime events, allowing you to match the local message with the server-confirmed one.
+To correctly update UI state (for example: `pending → delivered`), you can provide a `sendId` — a client-generated unique identifier.
+
+This `sendId` will also be included in the message received via realtime events, allowing the client to match the local message with the server-confirmed one.
 
 
 ## Example
+
 ```swift
 // Define message target
 let target: MessageTarget = .dialog(id: "dialogId")
@@ -28,29 +30,115 @@ let target: MessageTarget = .dialog(id: "dialogId")
 
 // Create message options
 let sendId = UUID().uuidString
-let options = try MessageOptions(text: "Hello!", sendId: sendId)
+
+let options = MessageOptions(
+    content: .text("Hello!"),
+    sendId: sendId
+)
 
 // Send message (completion-based)
 chatClient.sendMessage(to: target, options: options) { result in
     switch result {
-    case .success(let messageId):
-        print("Message sent: \(messageId)")
-    case .failure(let error):
-        print("Failed to send message: \(error)")
+
+        case .success(let messageId):
+            print("Message sent: \(messageId)")
+
+        case .failure(let error):
+            print("Failed to send message: \(error)")
     }
 }
 
 // Or using async/await
 do {
-    let messageId = try await chatClient.sendMessage(to: target, options: options)
+
+    let messageId = try await chatClient.sendMessage(
+        to: target,
+        options: options
+    )
+
     print("Message sent: \(messageId)")
+
 } catch {
+
     print("Failed to send message: \(error)")
 }
 ```
 
 
-## Message model
+## Message Content
+
+The SDK uses two different content models depending on the direction of the message:
+
+- `SendContent` — used when sending messages  
+- `MessageContent` — used for messages received from the server  
+
+
+
+## Sending Content (`SendContent`)
+
+`SendContent` defines what the client is allowed to send.
+
+Supported content types:
+
+- text
+- attachments
+- composite (text + attachments)
+- contact
+- location
+
+Example:
+
+```swift
+let content = SendContent.composite(
+    text: "See attached file",
+    attachments: [file]
+)
+```
+
+Usage:
+
+```swift
+let options = MessageOptions(
+    content: content,
+    sendId: UUID().uuidString
+)
+```
+
+
+## Received Content (`MessageContent`)
+
+`MessageContent` represents the final message as delivered by the server.
+
+It may include additional data not present in the original request.
+
+Supported content types:
+
+- text
+- attachments
+- composite
+- contact
+- location
+- keyboardOnly
+- system
+
+Example:
+
+```swift
+switch message.content {
+
+    case .text(let content):
+        print(content.text)
+
+    case .composite(let content):
+        print(content.text)
+
+    default:
+        break
+}
+```
+
+
+## Message Model
 
 ```swift
 public struct Message: Hashable, Codable {
@@ -70,19 +158,14 @@ public struct Message: Hashable, Codable {
     /// Sender of the message
     public let from: Participant
 
-    /// Text content of the message
-    ///
-    /// May be nil when message contains only attachments
-    public let text: String?
+    /// Final message content delivered by the server
+    public let content: MessageContent
 
     /// Client-generated request ID
     public let sendId: String?
 
     /// Indicates whether message is outgoing
     public let isOutgoing: Bool
-
-    /// Attachments metadata
-    public let attachments: [MessageAttachment]
 }
 ```
 
@@ -90,30 +173,38 @@ public struct Message: Hashable, Codable {
 ## Message History
 
 Message history is retrieved via a dialog instance:
+
 ```swift
 let request = HistoryRequest()
 
-// get history slice (completion-based)
+// Get history slice (completion-based)
 dialog.getHistory(request: request) { result in
+
     switch result {
+
         case .success(let historySlice):
+            break
+
         case .failure(let error):
+            break
     }
 }
 
 // Or using async/await
-try await dialog.getHistory(request: request)
+let slice = try await dialog.getHistory(request: request)
 ```
 
 
-### Request parameters
-HistoryRequest supports:
-- limit — number of messages to load  
-- cursor — pagination position (HistoryCursor)  
+## Request Parameters
+
+`HistoryRequest` supports:
+
+- `limit` — number of messages to load  
+- `cursor` — pagination position (`HistoryCursor`)  
 
 ```swift
 /// Cursor pointing to a specific message in history.
-struct HistoryCursor: Hashable, Codable {
+public struct HistoryCursor: Hashable, Codable {
 
     /// Identifier of the reference message.
     public let messageId: String
@@ -128,7 +219,7 @@ struct HistoryCursor: Hashable, Codable {
 
 ```swift
 /// Represents a portion of message history with cursors for pagination.
-struct HistorySlice: Hashable, Codable {
+public struct HistorySlice: Hashable, Codable {
 
     /// Messages returned in this slice of history.
     public let items: [Message]
@@ -145,10 +236,13 @@ struct HistorySlice: Hashable, Codable {
 - `newerCursor` — used to load newer messages  
 
 
-### Working with cursors
+## Working with Cursors
 
-Cursors can also be created manually. This is useful, for example, after reconnect:
-- take the last known message and use id   
-- set direction to MoveDirection.NEWER  
+Cursors can also be created manually.
 
-This allows checking whether new messages after the connection was restored.
+This is useful, for example, after reconnect:
+
+- take the last known message ID  
+- set direction to `.newer`  
+
+This allows checking whether new messages appeared while the connection was unavailable.

@@ -4,32 +4,35 @@
 
 Messages may contain interactive keyboards that allow users to perform actions directly from the chat UI.
 
-Keyboards are delivered by the server as part of MessageContent.
+Keyboards are delivered by the server as part of `MessageContent`.
 
 Supported keyboard styles:
 
 - inline button grid
 - list-style menu with sections
 
+
 ## Keyboard Types
 
-```kotlin
-sealed class ChatKeyboard
+```swift
+public enum ChatKeyboard
 ```
 
 ### Buttons Keyboard
 
 Grid-style keyboard where buttons are arranged into rows.
 
-```kotlin
-ChatKeyboard.Buttons(
-    rows = listOf(
-        ChatKeyboardRow(
-            buttons = listOf(
-                ChatKeyboardButton(...),
-                ChatKeyboardButton(...)
+```swift
+let keyboard = ChatKeyboard.buttons(
+    .init(
+        rows: [
+            ChatKeyboardRow(
+                buttons: [
+                    ChatKeyboardButton(...),
+                    ChatKeyboardButton(...)
+                ]
             )
-        )
+        ]
     )
 )
 ```
@@ -40,14 +43,18 @@ List-style keyboard with sections.
 
 Typically rendered as a single trigger button that opens a menu.
 
-```kotlin
-ChatKeyboard.ListMenu(
-    title = "Open menu",
-    sections = listOf(
-        ChatKeyboardSection(
-            title = "Main",
-            buttons = listOf(...)
-        )
+```swift
+let keyboard = ChatKeyboard.listMenu(
+    .init(
+        title: "Open menu",
+        sections: [
+            ChatKeyboardSection(
+                title: "Main",
+                buttons: [
+                    ...
+                ]
+            )
+        ]
     )
 )
 ```
@@ -56,147 +63,166 @@ ChatKeyboard.ListMenu(
 
 ### Row
 
-```kotlin
-data class ChatKeyboardRow(
-    val buttons: List<ChatKeyboardButton>
-)
+```swift
+public struct ChatKeyboardRow {
+    public let buttons: [ChatKeyboardButton]
+}
 ```
 
 ### Section
 
-```kotlin
-data class ChatKeyboardSection(
-    val title: String,
-    val buttons: List<ChatKeyboardButton>
-)
+```swift
+public struct ChatKeyboardSection {
+    public let title: String
+    public let buttons: [ChatKeyboardButton]
+}
 ```
 
 ### Button
 
-```kotlin
-data class ChatKeyboardButton(
-    val id: String,
-    val label: String,
-    val action: ChatButtonAction,
-    val metadata: Map<String, Any>? = null
-)
+```swift
+public struct ChatKeyboardButton {
+    public let id: String
+    public let label: String
+    public let action: ChatButtonAction
+    public let metadata: [String: MetadataValue]?
+}
 ```
 
 Fields:
-- id — unique button identifier
-- label — text shown to the user
-- action — action executed on click
-- metadata — optional UI-related data
 
+- `id` — unique button identifier
+- `label` — text shown to the user
+- `action` — action executed on tap
+- `metadata` — optional UI-related data
 
 Example metadata:
 
-```kotlin
-metadata = mapOf(
-    "color" to "primary",
-    "size" to "large"
-)
+```swift
+[
+    "color": .string("primary"),
+    "danger": .bool(true)
+]
 ```
+
 
 ## Button Actions
 
-```kotlin
-sealed class ChatButtonAction
+```swift
+public enum ChatButtonAction
 ```
 
 ### Open URL
 
 Opens an external link.
 
-```kotlin
-ChatButtonAction.OpenUrl(
-    url = "https://example.com"
+```swift
+.openUrl(
+    .init(
+        url: "https://example.com"
+    )
 )
 ```
 
 The client application is responsible for handling navigation.
 
+
 ### Send Callback
 
 Sends a callback event to the backend.
 
-```kotlin
-ChatButtonAction.SendCallback(
-    data = "confirm_order"
+```swift
+.sendCallback(
+    .init(
+        data: "confirm_order"
+    )
 )
 ```
 
 This action is typically used for bots or interactive workflows.
 
+
 ### Request Data
 
 Requests information from the client device.
 
-```kotlin
-ChatButtonAction.RequestData(
-    type = "location"
+```swift
+.requestData(
+    .init(
+        type: "location"
+    )
 )
 ```
 
-Common types:
-- location
-- contact
+Common request types:
+
+- `location`
+- `contact`
 
 
 ## Receiving Interactive Messages
 
 Keyboards may be included in:
 
-- MessageContent.KeyboardOnly
-- MessageContent.Composite
+- `MessageContent.keyboardOnly`
+- `MessageContent.composite`
 
 Example:
 
-```kotlin
-when (val content = message.content) {
-    is MessageContent.KeyboardOnly -> {
+```swift
+switch message.content {
+
+    case .keyboardOnly(let content):
+
         renderKeyboard(content.keyboard)
-    }
-    is MessageContent.Composite -> {
-        content.keyboard?.let {
-            renderKeyboard(it)
+
+    case .composite(let content):
+
+        if let keyboard = content.keyboard {
+            renderKeyboard(keyboard)
         }
-    }
-    else -> Unit
+
+    default:
+        break
 }
 ```
 
+
 ## Sending Button Actions
 
-When the user presses a button, the client should send a corresponding MessageAction.
+When the user taps a button, the client should send a corresponding `MessageAction`.
 
-```kotlin
+```swift
 chatClient.sendAction(
-    messageId = message.id,
-    action = MessageAction.ButtonClick(
-        id = button.id,
-        data = "confirm_order"
+    .buttonClick(
+        messageId: message.id,
+        buttonId: button.id,
+        data: "confirm_order"
     )
-) { result -> }
+)
 ```
 
-### MessageAction
 
-```kotlin
-sealed interface MessageAction
+## MessageAction
+
+```swift
+public enum MessageAction
 ```
-### Button Click
 
-Represents a button press event.
+## Button Click
 
-```kotlin
-MessageAction.ButtonClick(
-    id = button.id,
-    data = data
+Represents a button tap event.
+
+```swift
+.buttonClick(
+    messageId: message.id,
+    buttonId: button.id,
+    data: "confirm_order"
 )
 ```
 
 Fields:
 
-- id — identifier of the clicked button
-- data — callback payload associated with the button
+- `messageId` — identifier of the related message
+- `buttonId` — identifier of the clicked button
+- `data` — callback payload associated with the button
