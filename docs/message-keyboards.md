@@ -117,11 +117,7 @@ public enum ChatButtonAction
 Opens an external link.
 
 ```swift
-.openUrl(
-    .init(
-        url: "https://example.com"
-    )
-)
+.openURL("https://example.com")
 ```
 
 The client application is responsible for handling navigation.
@@ -132,11 +128,7 @@ The client application is responsible for handling navigation.
 Sends a callback event to the backend.
 
 ```swift
-.sendCallback(
-    .init(
-        data: "confirm_order"
-    )
-)
+.callback("confirm_order")
 ```
 
 This action is typically used for bots or interactive workflows.
@@ -147,11 +139,7 @@ This action is typically used for bots or interactive workflows.
 Requests information from the client device.
 
 ```swift
-.requestData(
-    .init(
-        type: "location"
-    )
-)
+.requestData("location")
 ```
 
 Common request types:
@@ -164,7 +152,7 @@ Common request types:
 
 Keyboards may be included in:
 
-- `MessageContent.keyboardOnly`
+- `MessageContent.keyboard`
 - `MessageContent.composite`
 
 Example:
@@ -172,9 +160,8 @@ Example:
 ```swift
 switch message.content {
 
-    case .keyboardOnly(let content):
-
-        renderKeyboard(content.keyboard)
+    case .keyboard(let keyboard):
+        renderKeyboard(keyboard)
 
     case .composite(let content):
 

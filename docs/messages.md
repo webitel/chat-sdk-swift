@@ -126,8 +126,8 @@ Example:
 ```swift
 switch message.content {
 
-    case .text(let content):
-        print(content.text)
+    case .text(let text):
+        print(text)
 
     case .composite(let content):
         print(content.text)

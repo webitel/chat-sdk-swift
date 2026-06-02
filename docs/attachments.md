@@ -20,33 +20,37 @@ File uploads are asynchronous and support:
 - resumable uploads
 
 Example
-```kotlin
-val request = UploadRequest(
-    source = FileSource.Stream(inputStream),
-    fileName = "image.png",
-    mimeType = "image/png",
-    totalSize = fileSize
+```swift
+let request = UploadRequest(
+    source: .stream(inputStream),
+    fileName: "image.png",
+    totalSize: fileSize
 )
 
-val task = chatClient.upload(
-    request,
-    object : UploadListener {
-        override fun onCreated(uploadId: String) {
-            // Save uploadId if resumable uploads are needed
-        }
+let task = chatClient.upload(
+    request: request,
+    observer: self
+)
+```
 
-        override fun onProgress(
-            uploaded: Long,
-            total: Long?
-        ) {}
+```swift
+extension ChatViewModel: UploadObserver {
 
-        override fun onCompleted(result: UploadResult) {
-            val uploadedFile = result.file
-        }
-
-        override fun onError(error: ChatError) {}
+    func onCreated(uploadId: String) {
+        // Save uploadId if resumable uploads are needed
     }
-)
+
+    func onProgress(
+        uploaded: Int64,
+        total: Int64?
+    ) {}
+
+    func onCompleted(_ result: UploadResult) {
+        let uploadedFile = result.file
+    }
+    
+    func onError(_ error: ChatError) {}
+}
 ```
 
 
@@ -56,14 +60,14 @@ The SDK supports multiple upload sources.
 
 
 #### ByteArray
-```kotlin
-FileSource.Bytes(bytes)
+```swift
+.data(data)
 ```
 
 
 #### InputStream
-```kotlin
-FileSource.Stream(inputStream)
+```swift
+.stream(inputStream)
 ```
 
 
@@ -73,17 +77,16 @@ Uploads may be resumed using resumeId.
 
 The upload identifier is provided via:
 
-```kotlin
-UploadListener.onCreated(uploadId)
+```swift
+UploadObserver.onCreated(uploadId:)
 ```
 
 Example:
-```kotlin
-val request = UploadRequest(
-    source = FileSource.Stream(stream),
-    fileName = "video.mp4",
-    mimeType = "video/mp4",
-    resumeId = savedUploadId
+```swift
+let request = UploadRequest(
+    source: .stream(inputStream),
+    fileName: "video.mp4",
+    resumeId: savedUploadId
 )
 ```
 
@@ -92,53 +95,47 @@ val request = UploadRequest(
 
 After a successful upload, the SDK returns file metadata.
 
-```kotlin
-data class UploadResult(
-    val file: UploadedFile,
-    val hash: Map<String, String>
-)
+```swift
+public struct UploadResult {
+    public let file: UploadedFile
+    public let hashes: [String: String]
+}
 ```
 
 Example:
 
-```kotlin
-val fileId = result.file.id
+```swift
+let fileId = result.file.id
 ```
 
 
 ### Sending Attachments
 
-Uploaded files can be attached to messages using SendAttachment.File.
+Uploaded files can be attached to messages using SendAttachment.file.
 
-```kotlin
-val content = SendContent.Composite(
-    text = "See attached file",
-    attachments = listOf(
-        SendAttachment.File(
-            fileId = uploadedFile.id
-        )
-    )
+```swift
+let content = SendContent.composite(
+    text: "See attached file",
+    attachments: [
+        .file(uploadedFile.id)
+    ]
 )
 ```
 
 Or attachment-only message:
 
-```kotlin
-val content = SendContent.Attachments(
-    attachments = listOf(
-        SendAttachment.File(
-            fileId = uploadedFile.id
-        )
-    )
-)
+```swift
+let content = SendContent.attachments([
+    .file(uploadedFile.id)
+])
 ```
 
 External URLs are also supported:
 
-```kotlin
-SendAttachment.Url(
-    url = "https://example.com/image.jpg"
-)
+```swift
+let content = SendContent.attachments([
+    .url(URL(string: "https://example.com/image.jpg"), "image.jpg")
+])
 ```
 
 
@@ -152,22 +149,25 @@ File downloads are asynchronous and support:
 
 Example:
 
-```kotlin
-val task = chatClient.download(
-    DownloadRequest(
-        fileId = fileId
+```swift
+let task = chatClient.download(
+    request: DownloadRequest(
+        fileId: fileId
     ),
-    object : DownloadListener {
-
-        override fun onChunk(chunk: ByteArray) {
-            output.write(chunk)
-        }
-
-        override fun onCompleted(result: DownloadResult) {}
-
-        override fun onError(error: ChatError) {}
-    }
+    observer: self
 )
+```
+```swift
+extension ChatViewModel: DownloadObserver {
+
+    func onChunk(_ chunk: Data) {
+        outputStream.write(chunk)
+    }
+    
+    func onCompleted(_ result: DownloadResult) {}
+    
+    func onError(_ error: ChatError) {}
+}
 ```
 
 
@@ -177,10 +177,10 @@ Downloads can resume from a specific byte offset.
 
 Example:
 
-```kotlin
-val request = DownloadRequest(
-    fileId = fileId,
-    offset = alreadyDownloadedBytes
+```swift
+let request = DownloadRequest(
+    fileId: fileId,
+    offset: alreadyDownloadedBytes
 )
 ```
 
@@ -191,8 +191,8 @@ Both uploads and downloads return a Cancellable.
 
 Example:
 
-```kotlin
-val task = chatClient.download(...)
+```swift
+let task = chatClient.download(...)
 
 task.cancel()
 ```
@@ -200,7 +200,11 @@ Cancellation interrupts the active transfer operation.
 
 The listener will receive:
 
-```kotlin
-ChatError.Canceled
+```swift
+ChatError.canceled
 ```
-via onError(...).
+
+via: 
+```swift
+onError(_:)
+```
