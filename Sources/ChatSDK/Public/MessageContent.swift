@@ -18,15 +18,15 @@ import Foundation
 public enum MessageContent: Hashable, Codable  {
 
     /// Plain text message.
-    case text(Text)
+    case text(String)
 
     /// Message containing only attachments.
-    case attachments(Attachments)
+    case attachments([MessageAttachment])
 
     /// Message containing only an interactive keyboard.
     ///
     /// Typically used for bot-driven UI (quick replies, menus).
-    case keyboardOnly(KeyboardOnly)
+    case keyboard(ChatKeyboard)
 
     /// Message with combined content.
     ///
@@ -49,22 +49,6 @@ public enum MessageContent: Hashable, Codable  {
     /// - user joined/left
     /// - status updates
 //    case system(System)
-
-    /// Plain text payload.
-    public struct Text: Hashable, Codable {
-        public let text: String
-        public init(text: String) { self.text = text }
-    }
-
-    /// Attachments payload.
-    public struct Attachments: Hashable, Codable {
-        public let attachments: [MessageAttachment]
-    }
-
-    /// Keyboard-only payload.
-    public struct KeyboardOnly: Hashable, Codable {
-        public let keyboard: ChatKeyboard
-    }
 
     /// Combined message payload.
     public struct Composite: Hashable, Codable {
@@ -124,6 +108,36 @@ public enum MessageContent: Hashable, Codable  {
 }
 
 
+public extension MessageContent {
+    var textValue: String? {
+        switch self {
+
+        case .text(let text):
+            return text
+
+        case .composite(let composite):
+            return composite.text
+
+        default:
+            return nil
+        }
+    }
+
+    var attachmentsValue: [MessageAttachment] {
+        switch self {
+        case .attachments(let items):
+            return items
+
+        case .composite(let composite):
+            return composite.attachments
+
+        default:
+            return []
+        }
+    }
+}
+
+
 /// Represents message content that can be sent from the client.
 ///
 /// This is a restricted subset of `MessageContent`.
@@ -131,7 +145,7 @@ public enum MessageContent: Hashable, Codable  {
 public enum SendContent {
 
     /// Plain text message.
-    case text(Text)
+    case text(String)
 
     /// Contact sharing message.
     case contact(Contact)
@@ -140,24 +154,10 @@ public enum SendContent {
     case location(Location)
     
     /// Message containing only attachments.
-    case attachments(Attachments)
+    case attachments([SendAttachment])
 
     /// Message with combined content (text + attachments).
     case composite(Composite)
-
-
-    public struct Text {
-        public let text: String
-        public init(text: String) { self.text = text }
-    }
-    
-
-    public struct Attachments {
-        public let attachments: [MessageAttachment]
-        public init(attachments: [MessageAttachment]) {
-            self.attachments = attachments
-        }
-    }
     
 
     public struct Contact {
@@ -193,8 +193,8 @@ public enum SendContent {
 
     public struct Composite {
         public let text: String
-        public let attachments: [MessageAttachment]
-        public init(text: String, attachments: [MessageAttachment] = []) {
+        public let attachments: [SendAttachment]
+        public init(text: String, attachments: [SendAttachment] = []) {
             self.text = text
             self.attachments = attachments
         }
@@ -208,20 +208,10 @@ public enum SendContent {
 /// and improving readability at call sites.
 public extension SendContent {
 
-    /// Creates a plain text message.
-    static func text(_ value: String) -> SendContent {
-        .text(.init(text: value))
-    }
-
-    /// Creates a message containing only attachments.
-    static func attachments(_ items: [MessageAttachment]) -> SendContent {
-        .attachments(.init(attachments: items))
-    }
-
     /// Creates a message with text and optional attachments.
     static func composite(
         text: String,
-        attachments: [MessageAttachment] = []
+        attachments: [SendAttachment] = []
     ) -> SendContent {
         .composite(.init(text: text, attachments: attachments))
     }
@@ -249,4 +239,24 @@ public extension SendContent {
             longitude: longitude
         ))
     }
+}
+
+
+/// Represents an attachment that can be sent in an outgoing message.
+///
+/// Attachments are references to already available content,
+/// either stored on remote storage or accessible via a public URL.
+public enum SendAttachment: Sendable {
+
+    /// A reference to a file that was previously uploaded to remote storage.
+    ///
+    /// - Parameter: file identifier on the server.
+    case file(String)
+
+    /// A reference to an external file accessible via URL.
+    ///
+    /// - Parameters:
+    ///   - url: Direct link to the file.
+    ///   - fileName: Original file name including extension.
+    case url(URL, String)
 }

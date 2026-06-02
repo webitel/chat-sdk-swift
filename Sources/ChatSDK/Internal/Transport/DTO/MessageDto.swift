@@ -109,14 +109,14 @@ internal extension MessageDto {
 
 internal struct MessageContentDto: Decodable {
     let text: String?
-    //let attachments: [AttachmentDto]
+    let attachments: [AttachmentDto]
     let interactive: InteractiveMessageDto?
     let contact: ContactMessageDto?
     let location: LocationMessageDto?
 
     private enum CodingKeys: String, CodingKey {
         case text = "body"
-        case attachments
+        case documents
         case interactive
         case contact
         case location
@@ -133,22 +133,22 @@ internal struct MessageContentDto: Decodable {
             forKey: .text
         )
 
-//        attachments = try container.decodeIfPresent(
-//            [AttachmentDto].self,
-//            forKey: .attachments
-//        ) ?? []
+        attachments = try container.decodeIfPresent(
+            [AttachmentDto].self,
+            forKey: .documents
+        ) ?? []
 
         interactive = try container.decodeIfPresent(
             InteractiveMessageDto.self,
             forKey: .interactive
         )
 
-        contact = try container.decodeIfPresent(
+        contact = try? container.decodeIfPresent(
             ContactMessageDto.self,
             forKey: .contact
         )
 
-        location = try container.decodeIfPresent(
+        location = try? container.decodeIfPresent(
             LocationMessageDto.self,
             forKey: .location
         )
@@ -181,25 +181,41 @@ extension MessageContentDto {
 
         let keyboard = interactive?.toDomain()
 
-        if
-            text?.isEmpty == false &&
-            keyboard != nil {
+        let attachments = attachments.map {
+            $0.toDomain()
+        }
+
+        let hasText = text?.isEmpty == false
+        let hasAttachments = !attachments.isEmpty
+        let hasKeyboard = keyboard != nil
+
+        let contentPartsCount = [
+            hasText,
+            hasAttachments,
+            hasKeyboard
+        ]
+            .filter { $0 }
+            .count
+
+        if contentPartsCount >= 2 {
             return .composite(
                 .init(
                     text: text,
-                    attachments: [],
+                    attachments: attachments,
                     keyboard: keyboard
                 )
             )
         }
-        
-       if let keyboard {
-            return .keyboardOnly(.init(keyboard: keyboard))
-       }
 
-        return .text(
-            .init(text: text ?? "")
-        )
+        if hasAttachments {
+            return .attachments(attachments)
+        }
+
+        if let keyboard {
+            return .keyboard(keyboard)
+        }
+
+        return .text(text ?? "")
     }
 }
 
@@ -370,27 +386,21 @@ internal struct InteractiveButtonDto: Decodable {
             URLActionDto.self,
             forKey: .url
         ) {
-            buttonAction = .openUrl(
-                .init(url: urlAction.url)
-            )
+            buttonAction = .openURL(urlAction.url)
         }
 
         if let requestAction = try? container.decode(
             RequestActionDto.self,
             forKey: .request
         ) {
-            buttonAction = .requestData(
-                .init(type: requestAction.action)
-            )
+            buttonAction = .requestData(requestAction.action)
         }
         
         if let callbackAction = try? container.decode(
             CallbackActionDto.self,
             forKey: .callback
         ) {
-            buttonAction = .sendCallback(
-                .init(data: callbackAction.data)
-            )
+            buttonAction = .callback(callbackAction.data)
         }
         
         if let buttonAction {
@@ -417,4 +427,53 @@ extension InteractiveButtonDto {
         )
     }
 }
+
+
+internal struct AttachmentDto: Decodable {
+    let id: String
+    let name: String
+    let mime: String
+    let size: Int64?
+    let url: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, mime, size, url
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        self.id = try container.decode(String.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.mime = try container.decode(String.self, forKey: .mime)
+        self.url = try? container.decodeIfPresent(String.self, forKey: .url)
+
+        if let intSize = try? container.decodeIfPresent(Int64.self, forKey: .size) {
+            self.size = intSize
+        }
+        else if let stringSize = try? container.decodeIfPresent(String.self, forKey: .size) {
+            self.size = Int64(stringSize)
+        }
+        
+        else {
+            self.size = nil
+        }
+    }
+}
+
+
+extension AttachmentDto {
+    
+    func toDomain() -> MessageAttachment {
+        let fileURL = url.flatMap { URL(string: $0) }
+        return MessageAttachment(
+            fileId: id,
+            fileName: name,
+            mimeType: mime,
+            size: size ?? 0,
+            url: fileURL
+        )
+    }
+}
+
 

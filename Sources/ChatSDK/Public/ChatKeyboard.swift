@@ -73,38 +73,25 @@ public struct ChatKeyboardButton: Hashable, Codable {
 public enum ChatButtonAction: Hashable, Codable {
 
     /// Opens external URL
-    case openUrl(OpenUrl)
+    case openURL(String)
 
     /// Sends callback to backend
-    case sendCallback(SendCallback)
+    case callback(String)
 
     /// Requests device data (e.g. location, contact)
-    case requestData(RequestData)
-
-
-    public struct OpenUrl: Hashable, Codable {
-        public let url: String
-    }
-
-    public struct SendCallback: Hashable, Codable {
-        public let data: String
-    }
-
-    public struct RequestData: Hashable, Codable {
-        public let type: String
-    }
+    case requestData(String)
 }
 
 
 public extension ChatKeyboardButton {
 
     var isUrl: Bool {
-        if case .openUrl = action { return true }
+        if case .openURL = action { return true }
         return false
     }
 
     var isCallback: Bool {
-        if case .sendCallback = action { return true }
+        if case .callback = action { return true }
         return false
     }
 

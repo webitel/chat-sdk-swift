@@ -8,72 +8,74 @@
 import Foundation
 
 
+/// Metadata describing a message attachment.
+public struct MessageAttachment:Hashable, Sendable, Codable {
 
-public enum MessageAttachment: Hashable, Codable {
-    case image(Image)
-    case file(File)
-}
-
-
-public struct AttachmentBase: Hashable, Codable {
-
-    /// Remote file identifier used for downloading
+    /// Remote file identifier.
     public let fileId: String
 
-    /// Original file name as provided by the sender
+    /// Original file name.
     public let fileName: String
 
-    /// MIME type reported by backend
+    /// MIME type.
     public let mimeType: String
 
-    /// File size in bytes
+    /// File size in bytes.
     public let size: Int64
+
+    /// Direct download URL if provided.
+    public let url: URL?
 
     public init(
         fileId: String,
         fileName: String,
         mimeType: String,
-        size: Int64
+        size: Int64,
+        url: URL? = nil
     ) {
         self.fileId = fileId
         self.fileName = fileName
         self.mimeType = mimeType
         self.size = size
+        self.url = url
     }
 }
 
 
-public struct Image: Hashable, Codable {
-
-    public let base: AttachmentBase
-
-    /// Optional preview (thumbnail)
-    public let previewId: String?
-
-    /// Width in pixels
-    public let width: Int?
-
-    /// Height in pixels
-    public let height: Int?
-
-    public init(
-        base: AttachmentBase,
-        previewId: String?,
-        width: Int?,
-        height: Int?
-    ) {
-        self.base = base
-        self.previewId = previewId
-        self.width = width
-        self.height = height
+public extension MessageAttachment {
+    enum AttachmentType: Sendable {
+        case image
+        case video
+        case audio
+        case file
     }
-}
 
+    /// Attachment type derived from MIME type.
+    var type: AttachmentType {
+        switch mimeType {
+        case let value where value.hasPrefix("image/"):
+            return .image
 
-public struct File: Hashable, Codable {
+        case let value where value.hasPrefix("video/"):
+            return .video
 
-    public let base: AttachmentBase
-    public init(base: AttachmentBase) {
-        self.base = base
+        case let value where value.hasPrefix("audio/"):
+            return .audio
+                
+        default:
+            return .file
+        }
+    }
+
+    var isImage: Bool {
+        type == .image
+    }
+
+    var isVideo: Bool {
+        type == .video
+    }
+
+    var isAudio: Bool {
+        type == .audio
     }
 }

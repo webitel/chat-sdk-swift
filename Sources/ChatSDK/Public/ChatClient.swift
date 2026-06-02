@@ -183,6 +183,50 @@ public protocol ChatClient {
     func sendAction(
         _ action: MessageAction
     ) async throws
+    
+    
+    /// Starts an asynchronous file upload operation.
+    ///
+    /// Upload progress and completion events are delivered
+    /// through the provided `UploadObserver`.
+    ///
+    /// The returned `Cancellable` can be used to cancel
+    /// the upload at any time.
+    ///
+    /// If the upload was interrupted previously,
+    /// `UploadRequest.resumeId` can be used to continue it.
+    ///
+    /// - Parameters:
+    ///   - request: Upload request parameters.
+    ///   - observer: Receives upload events.
+    /// - Returns: A cancellable upload task.
+    @discardableResult
+    func upload(
+        request: UploadRequest,
+        observer: UploadObserver
+    ) -> Cancellable
+    
+    
+    /// Starts an asynchronous file download operation.
+    ///
+    /// Downloaded file data is delivered incrementally
+    /// through `DownloadObserver.onChunk`.
+    ///
+    /// The returned `Cancellable` can be used to cancel
+    /// the download at any time.
+    ///
+    /// Downloads may optionally resume from a specific byte offset
+    /// using `DownloadRequest.offset`.
+    ///
+    /// - Parameters:
+    ///   - request: Download parameters.
+    ///   - observer: Receives download events.
+    /// - Returns: A cancellable download task.
+    @discardableResult
+    func download(
+        request: DownloadRequest,
+        observer: DownloadObserver
+    ) -> Cancellable
 
     
     /// Adds an observer for chat events (messages, dialogs, typing, etc.).

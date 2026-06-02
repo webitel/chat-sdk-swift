@@ -14,13 +14,14 @@ internal class ChatAPIClient: ChatAPI {
     private let headerProvider: HeaderProvider
     private let context: ClientContext
     
-    private let sendTextPath = "/api/v1/messages/text"
-    private let sendContactPath = "/api/v1/messages/contact"
-    private let sendLocationPath = "/api/v1/messages/location"
-    private let sendActionPath = "api/v1/messages/interactive"
     private let dialogsPath = "/api/v1/threads"
     private let contactsPath = "/api/v1/contacts"
     private let registerPath = "/api/v1/auth/devices"
+    private let sendTextPath = "/api/v1/messages/text"
+    private let sendFilePath = "/api/v1/messages/document"
+    private let sendContactPath = "/api/v1/messages/contact"
+    private let sendLocationPath = "/api/v1/messages/location"
+    private let sendActionPath = "/api/v1/messages/interactive"
     
     private let logger = SDKLogger.make("chat.api")
     
@@ -187,13 +188,17 @@ internal class ChatAPIClient: ChatAPI {
         _ request: URLRequest,
         parser: (Data, HTTPURLResponse) throws -> T
     ) async throws -> T {
+        logger.debug("Sending request: \(request.url?.absoluteString ?? "nil")")
         
         do {
-            logger.debug("Sending request: \(request)")
-            
             let (data, response) = try await session.data(for: request)
             
-            logger.debug("Received response: \(String(decoding: data, as: UTF8.self))")
+            logger.debug("""
+                Received response:
+                url: \(request.url?.absoluteString ?? "nil")
+                size: \(data.count) bytes
+                status: \((response as? HTTPURLResponse)?.statusCode ?? -1)
+              """)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw ChatError.invalidResponse
@@ -206,10 +211,11 @@ internal class ChatAPIClient: ChatAPI {
             
         } catch {
             if let err = sslDelegate.lastSSLError {
-                logger.error("catch ssl pinning error: \(err)")
+                logger.error("SSL pinning error: \(err)")
                 throw err
             }
-            logger.error("catch error: \(error)")
+            
+            logger.error("Request failed: \(error)")
             throw ChatError.unknown(
                 code: ChatError.unknownCode,
                 message: error.localizedDescription,
@@ -340,7 +346,7 @@ internal class ChatAPIClient: ChatAPI {
 
                 let dto = SendTextMessageRequestDto(
                     target: target,
-                    text: content.text,
+                    text: content,
                     sendId: options.sendId
                 )
 
@@ -349,9 +355,22 @@ internal class ChatAPIClient: ChatAPI {
                     body: try? jsonEncoder.encode(dto)
                 )
 
-            case .attachments:
-                // TODO: Implement attachments sending
-                return nil
+            case .attachments(let attachments):
+                guard let url = buildURL(path: sendFilePath) else {
+                    return nil
+                }
+
+                let dto = SendAttachmentsRequestDto(
+                    target: target,
+                    text: nil,
+                    attachments: attachments,
+                    sendId: options.sendId
+                )
+
+                return RequestComponents(
+                    url: url,
+                    body: try? jsonEncoder.encode(dto)
+                )
 
             case .contact(let content):
                 guard let url = buildURL(path: sendContactPath) else {
@@ -391,13 +410,14 @@ internal class ChatAPIClient: ChatAPI {
                 )
 
             case .composite(let content):
-                guard let url = buildURL(path: sendTextPath) else {
+                guard let url = buildURL(path: sendFilePath) else {
                     return nil
                 }
 
                 let dto = SendAttachmentsRequestDto(
                     target: target,
                     text: content.text,
+                    attachments: content.attachments,
                     sendId: options.sendId
                 )
 
@@ -707,19 +727,6 @@ internal class ChatAPIClient: ChatAPI {
             "last_msg"
         ].map {
             URLQueryItem(name: "fields", value: $0)
-        }
-    }
-    
-    
-    private func mapDialogTypeToKind(
-        _ type: DialogType
-    ) -> Int? {
-        switch type {
-        case .direct: return 1
-        case .group: return 2
-        case .channel: return 3
-        case .unknown:
-            return nil
         }
     }
     

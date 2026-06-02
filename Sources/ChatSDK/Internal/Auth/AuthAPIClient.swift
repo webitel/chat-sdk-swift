@@ -251,19 +251,23 @@ final class AuthAPIClient: AuthService {
         currentContact = nil
     }
 
-        
+
     private func perform<T>(
         _ request: URLRequest,
         parser: (Data, HTTPURLResponse) throws -> T
     ) async throws -> T {
-        
+        logger.debug("Sending request: \(request.url?.absoluteString ?? "nil")")
+
         do {
-            logger.debug("Sending request: \(request)")
-            
             let (data, response) = try await session.data(for: request)
-            
-            logger.debug("Received response: \(String(decoding: data, as: UTF8.self))")
-            
+
+            logger.debug("""
+                Received response:
+                url: \(request.url?.absoluteString ?? "nil")
+                size: \(data.count) bytes
+                status: \((response as? HTTPURLResponse)?.statusCode ?? -1)
+              """)
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw ChatError.invalidResponse
             }
@@ -275,10 +279,11 @@ final class AuthAPIClient: AuthService {
             
         } catch {
             if let err = sslDelegate.lastSSLError {
-                logger.error("catch ssl pinning error: \(err)")
+                logger.error("SSL pinning error: \(err)")
                 throw err
             }
-            logger.error("catch error: \(error)")
+
+            logger.error("Request failed: \(error)")
             throw ChatError.unknown(
                 code: ChatError.unknownCode,
                 message: error.localizedDescription,

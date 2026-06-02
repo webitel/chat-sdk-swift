@@ -9,12 +9,17 @@ import Foundation
 
 
 internal class DefaultChatClient: ChatClient {
+    func upload(request: UploadRequest, observer: any UploadObserver) -> any Cancellable {
+        fileTransferClient.upload(request: request, observer: observer)
+    }
+    
     
     private let apiProvider: ChatAPI
     private let authManager: AuthService
     private let dialogFactory: DialogFactory
     private let context: ClientContext
     private let realtimeTransport: RealtimeTransport
+    private let fileTransferClient: HttpFileTransferClient
     private let hub: RealtimeHub
     
     private var realtimeEnabled: Bool = false
@@ -41,7 +46,8 @@ internal class DefaultChatClient: ChatClient {
         authManager: AuthService,
         dialogFactory: DialogFactory,
         hub: RealtimeHub,
-        realtimeTransport: RealtimeTransport
+        realtimeTransport: RealtimeTransport,
+        fileTransferClient: HttpFileTransferClient
     ) {
         self.apiProvider = apiProvider
         self.authManager = authManager
@@ -49,6 +55,7 @@ internal class DefaultChatClient: ChatClient {
         self.context = context
         self.hub = hub
         self.realtimeTransport = realtimeTransport
+        self.fileTransferClient = fileTransferClient
         self.realtimeTransport.setObserver(self)
     }
     
@@ -320,6 +327,11 @@ internal class DefaultChatClient: ChatClient {
 
             try await self.apiProvider.sendAction(action: action)
         }
+    }
+    
+    
+    func download(request: DownloadRequest, observer: any DownloadObserver) -> any Cancellable {
+        fileTransferClient.download(request, observer)
     }
     
     

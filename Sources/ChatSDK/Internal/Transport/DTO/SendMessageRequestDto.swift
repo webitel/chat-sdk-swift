@@ -78,19 +78,50 @@ internal struct SendContactRequestDto: Encodable {
 
 
 internal struct SendAttachmentsRequestDto: Encodable {
-    
     let body: String?
     let send_id: String
     let to: TargetDto
-    
+    let documents: [SendAttachmentDto]
+
     init(
         target: MessageTarget,
-        text: String,
-        sendId: String,
+        text: String?,
+        attachments: [SendAttachment],
+        sendId: String
     ) {
         self.body = text
         self.send_id = sendId
         self.to = TargetDto(target)
+        self.documents = attachments.map {
+            $0.toDto()
+        }
+    }
+}
+
+
+internal struct SendAttachmentDto: Encodable {
+    let id: String?
+    let url: String?
+    let fileName: String?
+    
+    private enum CodingKeys: String, CodingKey {
+        
+        case id
+        case url
+        case fileName = "file_name"
+    }
+}
+
+
+extension SendAttachment {
+    func toDto() -> SendAttachmentDto {
+        switch self {
+        case .file(let id):
+            return .init(id: id, url: nil, fileName: nil)
+
+        case .url(let url, let fileName):
+            return .init(id: nil, url: "\(url)", fileName: fileName)
+        }
     }
 }
 

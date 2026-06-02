@@ -55,6 +55,12 @@ public enum ChatClientFactory {
             headerProvider: headerProvider
         )
         
+        
+        let fileTransferClient = HttpFileTransferClient(
+            context: context,
+            headerProvider: headerProvider
+        )
+        
         authManager.addTokenListener { token in
             realtimeTransport.onAuthUpdated(token)
         }
@@ -71,7 +77,8 @@ public enum ChatClientFactory {
             authManager: authManager,
             dialogFactory: dialogFactory,
             hub: realtimeHub,
-            realtimeTransport: realtimeTransport
+            realtimeTransport: realtimeTransport,
+            fileTransferClient: fileTransferClient
         )
         return client as any ChatClient
     }
