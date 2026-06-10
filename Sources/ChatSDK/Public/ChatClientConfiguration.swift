@@ -20,7 +20,21 @@ public struct ChatClientConfiguration {
     public var logLevel: Logger.Level = .error
     
     
+    /// Custom log handler factory used to intercept and process internal SDK logs.
     public var logHandler: ((String) -> LogHandler)?
+
+    
+    /// Enables automatic token refresh and request retry on `401 Unauthorized` responses.
+    ///
+    /// Default value is `true`.
+    ///
+    /// When enabled, the SDK will:
+    /// - Detect `401` responses from API requests
+    /// - Request a new JWT or Contact via `AuthMethod`
+    /// - Retry the original request once the token is refreshed and validated
+    ///
+    /// If the refreshed token is still invalid, the original request will fail with `401`.
+    public var autoRefreshAuth: Bool = true
 
 
     /// Collection of Base64-encoded SHA-256 public key hashes (SPKI)

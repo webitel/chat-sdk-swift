@@ -13,6 +13,8 @@ internal protocol AuthService {
     var currentContact: ContactDto? { get }
 
     func refresh() async throws
+    func ensureAuthValid() async throws
+    func clearAuth()
 
     func endSession() async throws
 }

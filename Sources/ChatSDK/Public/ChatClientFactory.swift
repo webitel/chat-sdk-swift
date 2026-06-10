@@ -29,6 +29,7 @@ public enum ChatClientFactory {
             authMethod: authMethod,
             deviceId: config.deviceId ?? deviceProvider.getDeviceId(),
             agent: systemDetails.userAgent,
+            autoRefreshAuth: config.autoRefreshAuth,
             pinnedHashes: config.pinnedPublicKeys
         )
     

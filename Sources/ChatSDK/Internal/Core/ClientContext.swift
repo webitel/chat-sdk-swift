@@ -15,6 +15,7 @@ internal struct ClientContext {
     public let authMethod: AuthMethod
     public let deviceId: String
     public let agent: String
+    public let autoRefreshAuth: Bool
     public var pinnedHashes: [String]
 
     public init(
@@ -24,6 +25,7 @@ internal struct ClientContext {
         authMethod: AuthMethod,
         deviceId: String,
         agent: String,
+        autoRefreshAuth: Bool,
         pinnedHashes: [String] = []
     ) {
         self.baseURL = baseURL
@@ -32,6 +34,7 @@ internal struct ClientContext {
         self.authMethod = authMethod
         self.deviceId = deviceId
         self.agent = agent
+        self.autoRefreshAuth = autoRefreshAuth
         self.pinnedHashes = pinnedHashes
     }
 }

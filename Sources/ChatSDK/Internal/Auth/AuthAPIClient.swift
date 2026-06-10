@@ -66,6 +66,16 @@ final class AuthAPIClient: AuthService {
             context: self.context
         )
     }
+    
+    
+    func ensureAuthValid() async throws {
+        logger.debug("ensure auth valid")
+        if headerProvider.hasAuth() {
+            return
+        }
+        
+        try await refresh()
+    }
 
     
     func refresh() async throws {
@@ -106,6 +116,11 @@ final class AuthAPIClient: AuthService {
                 response: $1
             )
         }
+    }
+    
+    
+    func clearAuth() {
+        headerProvider.updateAccessToken(nil)
     }
 
     

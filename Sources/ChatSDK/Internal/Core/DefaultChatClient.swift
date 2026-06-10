@@ -370,12 +370,17 @@ internal class DefaultChatClient: ChatClient {
         _ operation: @escaping () async throws -> T
     ) async throws -> T {
         do {
+            try await authManager.ensureAuthValid()
             return try await operation()
 
         } catch let error as ChatError {
             if case .unauthorized = error {
-                try await authManager.refresh()
-                return try await operation()
+                authManager.clearAuth()
+                
+                if context.autoRefreshAuth {
+                    try await authManager.refresh()
+                    return try await operation()
+                }
             }
             throw error
         } catch {
@@ -431,7 +436,11 @@ extension DefaultChatClient: RealtimeObserver {
         }
         
         if case ChatError.unauthorized = error {
-            self.refreshAuthAndReconnect()
+            if context.autoRefreshAuth {
+                self.refreshAuthAndReconnect()
+                return
+            }
+            self.failRealtime(error)
             return
         }
         
@@ -457,7 +466,11 @@ extension DefaultChatClient: RealtimeObserver {
         }
         
         if code == 401 || code == 1008 {
-            self.refreshAuthAndReconnect()
+            if context.autoRefreshAuth {
+                self.refreshAuthAndReconnect()
+                return
+            }
+            self.closeRealtime(code: code, reason: reason)
             return
         }
         
