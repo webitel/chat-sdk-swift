@@ -229,9 +229,18 @@ internal class DefaultChatClient: ChatClient {
             
             self.realtimeEnabled = true
             self.retryAttempt = 0
-            
             self.hub.updateState(.connecting)
-            self.realtimeTransport.connect()
+            
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.authManager.ensureAuthValid()
+                    
+                    self.connectRealtime()
+                } catch {
+                    self.handleConnectError(error.asChatError)
+                }
+            }
         }
     }
     
@@ -362,6 +371,23 @@ internal class DefaultChatClient: ChatClient {
     
     func removeConnectionObserver(_ observer: any ConnectionObserver) {
         hub.removeConnectionObserver(observer)
+    }
+    
+    
+    private func connectRealtime() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            if !realtimeEnabled { return }
+            self.realtimeTransport.connect()
+        }
+    }
+    
+    
+    private func handleConnectError(_ error: ChatError) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            failRealtime(error)
+        }
     }
     
     
