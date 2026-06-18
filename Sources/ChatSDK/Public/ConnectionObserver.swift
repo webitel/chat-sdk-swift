@@ -14,5 +14,9 @@ import Foundation
 public protocol ConnectionObserver: AnyObject {
     
     /// Called when the connection state changes.
-    func onStateChanged(_ to: ConnectionState)
+    ///
+    /// - Parameters:
+    ///   - from: The previous connection state.
+    ///   - to: The new connection state.
+    func onStateChanged(_ from: ConnectionState, _ to: ConnectionState)
 }

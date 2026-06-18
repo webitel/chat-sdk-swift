@@ -106,9 +106,6 @@ internal final class RealtimeHub {
     ) {
         queue.async(flags: .barrier) {
             self.connectionObservers.add(observer)
-            observer.onStateChanged(
-                self.publishedState
-            )
         }
     }
     
@@ -129,11 +126,14 @@ internal final class RealtimeHub {
             guard
                 self.publishedState != newState
             else { return }
-
-            self.logger.debug("new connection state: \(newState)")
             
+            let oldState = self.publishedState
             self.publishedState = newState
-
+            
+            self.logger.debug(
+                "connection state: \(oldState) -> \(newState)"
+            )
+            
             let observers = self.connectionObservers.allObjects
                 .compactMap { $0 as? ConnectionObserver }
 
@@ -142,7 +142,7 @@ internal final class RealtimeHub {
                     scope: "connection",
                     event: newState
                 ) {
-                    observer.onStateChanged(newState)
+                    observer.onStateChanged(oldState, newState)
                 }
             }
         }
