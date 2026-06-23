@@ -22,7 +22,8 @@ public enum ChatError: Error, Equatable {
     case invalidResponse
 
     // MARK: - Client
-
+    case badRequest(message: String?)
+    
     case encodingFailed
     case emptyMessage
     
@@ -118,6 +119,9 @@ extension ChatError: LocalizedError {
 
         case .internalServerError(let message):
             return message ?? "Internal server error"
+        
+        case .badRequest(let message):
+            return message ?? "Bad request"
 
         case .notImplemented:
             return "Not implemented"
@@ -140,6 +144,9 @@ public extension ChatError {
         underlying: Error? = nil
     ) -> ChatError {
         switch statusCode {
+        case 400:
+            return .badRequest(message: message)
+                
         case 401:
             return .unauthorized
 

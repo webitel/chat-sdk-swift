@@ -183,6 +183,36 @@ internal class DefaultChatClient: ChatClient {
     }
     
     
+    func getOrCreateDialog(contactId: ContactID, completion: @escaping (Result<any Dialog, ChatError>) -> Void) {
+        Task {
+            do {
+                let result = try await self.getOrCreateDialog(
+                    contactId: contactId
+                )
+                
+                completion(.success(result))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+    
+    
+    func getOrCreateDialog(contactId: ContactID) async throws -> any Dialog {
+        try await performWithAuthRetry {
+
+            let result = try await self.apiProvider.getOrCreateDialog(contactId: contactId)
+
+            return self.dialogFactory.getOrCreate(
+                client: self,
+                dto: result
+            )
+        }
+    }
+    
+    
     func getContacts(request: ContactRequest, completion: @escaping (Result<Page<Contact>, ChatError>) -> Void) {
         Task {
             do {

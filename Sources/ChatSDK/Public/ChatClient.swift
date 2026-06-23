@@ -101,6 +101,31 @@ public protocol ChatClient {
     func getContacts(
         request: ContactRequest
     ) async throws -> Page<Contact>
+    
+    
+    /// Returns a direct dialog for the specified contact.
+    ///
+    /// If no direct dialog exists, a new one is created.
+    ///
+    /// - Parameters:
+    ///   - contactId: The unique identifier of the contact.
+    ///   - completion: Completion handler returning the dialog or error.
+    func getOrCreateDialog(
+        contactId: ContactID,
+        completion: @escaping (Result<any Dialog, ChatError>) -> Void
+    )
+    
+    
+    /// Returns a direct dialog for the specified contact.
+    ///
+    /// If no direct dialog exists, a new one is created.
+    ///
+    /// - Parameter contactId: The unique identifier of the contact.
+    /// - Returns: A direct dialog associated with the contact.
+    /// - Throws: `ChatError` if the request fails.
+    func getOrCreateDialog(
+        contactId: ContactID
+    ) async throws -> any Dialog
 
     
     /// Opens realtime connection (e.g., WebSocket).

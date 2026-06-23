@@ -36,4 +36,8 @@ internal protocol ChatAPI: AnyObject {
     func sendAction(
         action: MessageAction
     ) async throws
+    
+    func getOrCreateDialog(
+        contactId: ContactID
+    ) async throws -> DialogDto
 }

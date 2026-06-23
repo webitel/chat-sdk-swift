@@ -113,6 +113,7 @@ internal struct MessageContentDto: Decodable {
     let interactive: InteractiveMessageDto?
     let contact: ContactMessageDto?
     let location: LocationMessageDto?
+    let system: SystemDto?
 
     private enum CodingKeys: String, CodingKey {
         case text = "body"
@@ -152,6 +153,11 @@ internal struct MessageContentDto: Decodable {
             LocationMessageDto.self,
             forKey: .location
         )
+        
+        system = try? container.decodeIfPresent(
+            SystemDto.self,
+            forKey: .system
+        )
     }
 }
 
@@ -175,6 +181,16 @@ extension MessageContentDto {
                     address: location.address ?? "",
                     latitude: location.latitude ?? 0,
                     longitude: location.longitude ?? 0
+                )
+            )
+        }
+        
+        if let system {
+            return .system(
+                .init(
+                    type: system.type,
+                    text: text ?? "",
+                    metadata: system.metadata?.mapValues { $0.toDomain() }
                 )
             )
         }
@@ -413,6 +429,29 @@ internal struct InteractiveButtonDto: Decodable {
                 debugDescription: "Action not found"
             )
         }
+    }
+}
+
+
+internal struct SystemDto: Decodable {
+    let type: String
+    let metadata: [String: JSONValue]?
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case metadata
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(
+            keyedBy: CodingKeys.self
+        )
+
+        type = try container.decode(String.self, forKey: .type)
+        metadata = try? container.decodeIfPresent(
+            [String: JSONValue].self,
+            forKey: .metadata
+        )
     }
 }
 

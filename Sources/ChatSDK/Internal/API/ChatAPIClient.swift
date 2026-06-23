@@ -84,6 +84,18 @@ internal class ChatAPIClient: ChatAPI {
     }
     
     
+    func getOrCreateDialog(contactId: ContactID) async throws -> DialogDto {
+        let urlRequest = try buildDialogRequest(contactId)
+        
+        return try await perform(urlRequest) {
+            try self.parseDialogResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+    
+    
     func getContacts(
         _ request: ContactRequest
     ) async throws -> Page<ContactDto> {
@@ -188,7 +200,7 @@ internal class ChatAPIClient: ChatAPI {
         _ request: URLRequest,
         parser: (Data, HTTPURLResponse) throws -> T
     ) async throws -> T {
-        logger.debug("Sending request: \(request.url?.absoluteString ?? "nil")")
+        logger.debug("Sending request: \(request.httpMethod ?? "") \(request.url?.absoluteString ?? "nil")")
         
         do {
             let (data, response) = try await session.data(for: request)
@@ -258,6 +270,34 @@ internal class ChatAPIClient: ChatAPI {
             urlRequest.httpBody = try jsonEncoder.encode(body)
         } catch {
             return nil
+        }
+        
+        return urlRequest
+    }
+    
+    
+    private func buildDialogRequest(
+        _ contactId: ContactID
+    ) throws -> URLRequest {
+        
+        guard let url = buildURL(path: dialogsPath) else {
+            throw ChatError.invalidURL
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+        
+        logger.debug("Get or create dialog for contact: \(contactId)")
+        
+        let body = CreateDialogRequestDto(contactID: contactId)
+        urlRequest.httpBody = try jsonEncoder.encode(body)
+        
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
         }
         
         return urlRequest
@@ -491,6 +531,23 @@ internal class ChatAPIClient: ChatAPI {
     ) throws {
         
         let _ = try response.validate(data: data, logger: logger)
+    }
+    
+    
+    private func parseDialogResponse(
+        data: Data,
+        response: HTTPURLResponse,
+    ) throws -> DialogDto {
+        
+        let validData =
+            try response.validate(data: data, logger: logger)
+        
+        let dto = try jsonDecoder.decode(
+            CreateDialogResponseDto.self,
+            from: validData
+        )
+        
+        return dto.thread
     }
     
     
