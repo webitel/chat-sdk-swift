@@ -134,12 +134,12 @@ internal struct MessageContentDto: Decodable {
             forKey: .text
         )
 
-        attachments = try container.decodeIfPresent(
+        attachments = (try? container.decodeIfPresent(
             [AttachmentDto].self,
             forKey: .documents
-        ) ?? []
+        )) ?? []
 
-        interactive = try container.decodeIfPresent(
+        interactive = try? container.decodeIfPresent(
             InteractiveMessageDto.self,
             forKey: .interactive
         )
@@ -272,12 +272,12 @@ internal struct InteractiveMessageDto: Decodable {
             forKey: .singleUse
         )) != nil)
         
-        markup = try container.decodeIfPresent(
+        markup = try? container.decodeIfPresent(
             MarkupDto.self,
             forKey: .markup
         )
         
-        listReplyDto = try container.decodeIfPresent(
+        listReplyDto = try? container.decodeIfPresent(
             ListReplyDto.self,
             forKey: .listReply
         )
@@ -390,7 +390,7 @@ internal struct InteractiveButtonDto: Decodable {
         )
 
         id = try container.decode(String.self, forKey: .id)
-        label = try container.decode(String.self, forKey: .label)
+        label = try container.decodeIfPresent(String.self, forKey: .label) ?? ""
         
         metadata = try? container.decodeIfPresent(
             [String: JSONValue].self,

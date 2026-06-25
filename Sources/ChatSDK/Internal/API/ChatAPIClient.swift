@@ -542,12 +542,21 @@ internal class ChatAPIClient: ChatAPI {
         let validData =
             try response.validate(data: data, logger: logger)
         
-        let dto = try jsonDecoder.decode(
-            CreateDialogResponseDto.self,
-            from: validData
-        )
-        
-        return dto.thread
+        do {
+            let dto = try jsonDecoder.decode(
+                CreateDialogResponseDto.self,
+                from: validData
+            )
+            
+            return dto.thread
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "create dialog response"
+            )
+            throw error
+        }
     }
     
     
@@ -559,17 +568,25 @@ internal class ChatAPIClient: ChatAPI {
         
         let validData =
             try response.validate(data: data, logger: logger)
-        
-        let dto = try jsonDecoder.decode(
-            DialogsResponseDto.self,
-            from: validData
-        )
-        
-        return Page(
-            page: dto.page ?? request.page,
-            items: dto.items ?? [],
-            hasNext: dto.hasNext ?? false
-        )
+        do {
+            let dto = try jsonDecoder.decode(
+                DialogsResponseDto.self,
+                from: validData
+            )
+            return Page(
+                page: dto.page ?? request.page,
+                items: dto.items ?? [],
+                hasNext: dto.hasNext ?? false
+            )
+
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "dialogs response"
+            )
+            throw error
+        }
     }
     
     
@@ -580,21 +597,30 @@ internal class ChatAPIClient: ChatAPI {
         
         let validData =
             try response.validate(data: data, logger: logger)
-        
-        let dto = try jsonDecoder.decode(
-            SendMessageResponseDto.self,
-            from: validData
-        )
-        
-        guard !dto.id.isEmpty else {
-            throw ChatError.unknown(
-                code: ChatError.unknownCode,
-                message: "Missing id in response",
-                underlying: nil
+        do {
+            let dto = try jsonDecoder.decode(
+                SendMessageResponseDto.self,
+                from: validData
             )
+            
+            guard !dto.id.isEmpty else {
+                throw ChatError.unknown(
+                    code: ChatError.unknownCode,
+                    message: "Missing id in response",
+                    underlying: nil
+                )
+            }
+            
+            return dto.id
+
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "send message response"
+            )
+            throw error
         }
-        
-        return dto.id
     }
     
     
@@ -607,16 +633,26 @@ internal class ChatAPIClient: ChatAPI {
         let validData =
             try response.validate(data: data, logger: logger)
         
-        let dto = try jsonDecoder.decode(
-            ContactsResponseDto.self,
-            from: validData
-        )
-        
-        return Page(
-            page: dto.page ?? request.page,
-            items: dto.items ?? [],
-            hasNext: dto.hasNext ?? false
-        )
+        do {
+            let dto = try jsonDecoder.decode(
+                ContactsResponseDto.self,
+                from: validData
+            )
+            
+            return Page(
+                page: dto.page ?? request.page,
+                items: dto.items ?? [],
+                hasNext: dto.hasNext ?? false
+            )
+
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "contacts response"
+            )
+            throw error
+        }
     }
     
     
@@ -628,11 +664,42 @@ internal class ChatAPIClient: ChatAPI {
         
         let validData =
             try response.validate(data: data, logger: logger)
-        
-        return try jsonDecoder.decode(
-            HistoryResponseDto.self,
-            from: validData
-        )
+ 
+        do {
+            return try jsonDecoder.decode(
+                HistoryResponseDto.self,
+                from: validData
+            )
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "history response"
+            )
+            throw error
+        }
+    }
+    
+    
+    private func logDecodingError(
+        _ error: Error,
+        data: Data,
+        responseName: String
+    ) {
+        guard let body = String(data: data, encoding: .utf8) else {
+            logger.error("""
+            Failed to decode \(responseName):
+            \(error)
+            """)
+            return
+        }
+
+        logger.error("""
+            Failed to decode \(responseName):
+            \(error)
+            Response body:
+            \(body)
+         """)
     }
     
     
