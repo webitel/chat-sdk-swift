@@ -19,11 +19,21 @@ public enum ChatKeyboard: Hashable, Codable {
 
 
     public struct Buttons: Hashable, Codable {
+        /// Indicates whether text input is unavailable while this keyboard is displayed.
+        public let noInput: Bool
+        
+        /// Rows of keyboard buttons.
         public let rows: [ChatKeyboardRow]
     }
 
     public struct ListMenu: Hashable, Codable {
+        /// Indicates whether text input is unavailable while this keyboard is displayed.
+        public let noInput: Bool
+        
+        /// Menu title displayed above sections.
         public let title: String
+        
+        /// Menu sections containing selectable items.
         public let sections: [ChatKeyboardSection]
     }
 }

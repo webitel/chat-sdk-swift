@@ -290,6 +290,7 @@ extension InteractiveMessageDto {
         if let markup {
             return .buttons(
                 .init(
+                    noInput: singleUse,
                     rows: markup.rows.map {
                         ChatKeyboardRow(
                             buttons: $0.buttons.map {
@@ -303,6 +304,7 @@ extension InteractiveMessageDto {
         if let listReplyDto {
             return .listMenu(
                 .init(
+                    noInput: singleUse,
                     title: listReplyDto.title,
                     sections: listReplyDto.sections.map {
                         ChatKeyboardSection(

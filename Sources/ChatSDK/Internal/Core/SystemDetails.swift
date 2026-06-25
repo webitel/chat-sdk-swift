@@ -81,5 +81,5 @@ extension Character {
 
 
 public enum SdkInfo {
-    public static let version = "0.6.2"
+    public static let version = "0.7.1"
 }
