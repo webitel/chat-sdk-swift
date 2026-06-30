@@ -24,6 +24,9 @@ public enum ChatKeyboard: Hashable, Codable {
         
         /// Rows of keyboard buttons.
         public let rows: [ChatKeyboardRow]
+        
+        /// Information about the selected button, if any.
+        public let selection: ChatKeyboardReaction?
     }
 
     public struct ListMenu: Hashable, Codable {
@@ -35,6 +38,9 @@ public enum ChatKeyboard: Hashable, Codable {
         
         /// Menu sections containing selectable items.
         public let sections: [ChatKeyboardSection]
+        
+        /// Information about the selected button in this menu, if any.
+        public let selection: ChatKeyboardReaction?
     }
 }
 

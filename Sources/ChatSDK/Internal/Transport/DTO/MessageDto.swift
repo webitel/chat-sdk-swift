@@ -114,8 +114,11 @@ internal struct MessageContentDto: Decodable {
     let contact: ContactMessageDto?
     let location: LocationMessageDto?
     let system: SystemDto?
+    
+    let reactedMetadata: ReactedMetadataDto?
 
     private enum CodingKeys: String, CodingKey {
+        case reactedMetadata = "reacted_metadata"
         case text = "body"
         case documents
         case interactive
@@ -142,6 +145,11 @@ internal struct MessageContentDto: Decodable {
         interactive = try? container.decodeIfPresent(
             InteractiveMessageDto.self,
             forKey: .interactive
+        )
+        
+        reactedMetadata = try? container.decodeIfPresent(
+            ReactedMetadataDto.self,
+            forKey: .reactedMetadata
         )
 
         contact = try? container.decodeIfPresent(
@@ -195,7 +203,7 @@ extension MessageContentDto {
             )
         }
 
-        let keyboard = interactive?.toDomain()
+        let keyboard = interactive?.toDomain(reacted: reactedMetadata)
 
         let attachments = attachments.map {
             $0.toDomain()
@@ -251,6 +259,65 @@ internal struct LocationMessageDto: Decodable {
 }
 
 
+internal struct ReactedMetadataDto: Decodable {
+    public let buttonCode: String
+    public let callbackData: String
+    public let reactedAt: Int64
+    public let reactedBy: ParticipantDto
+    
+    private enum CodingKeys: String, CodingKey {
+        case buttonCode = "button_code"
+        case callbackData = "callback_data"
+        case reactedAt = "reacted_at"
+        case reactedBy = "reacted_by"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        buttonCode = try container.decode(String.self, forKey: .buttonCode)
+
+        callbackData = try container.decode(String.self, forKey: .callbackData)
+        reactedBy = try container.decode(ParticipantDto.self, forKey: .reactedBy)
+
+        reactedAt = try Self.decodeTimestamp(
+            container,
+            key: .reactedAt
+        )
+    }
+    
+    func toDomain() -> ChatKeyboardReaction {
+        let reactedAt = Date(timeIntervalSince1970: Double(reactedAt) / 1000.0)
+        return ChatKeyboardReaction(
+            buttonCode: buttonCode,
+            callbackData: callbackData,
+            reactedAt: reactedAt,
+            reactedBy: reactedBy.toDomain()
+        )
+    }
+    
+    private static func decodeTimestamp(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) throws -> Int64 {
+
+        if let intValue = try? container.decode(Int64.self, forKey: key) {
+            return intValue
+        }
+
+        if let stringValue = try? container.decode(String.self, forKey: key),
+           let intValue = Int64(stringValue) {
+            return intValue
+        }
+
+        throw DecodingError.dataCorruptedError(
+            forKey: key,
+            in: container,
+            debugDescription: "Invalid timestamp format"
+        )
+    }
+}
+
+
 internal struct InteractiveMessageDto: Decodable {
     let singleUse: Bool
     let markup: MarkupDto?
@@ -286,7 +353,7 @@ internal struct InteractiveMessageDto: Decodable {
 
 
 extension InteractiveMessageDto {
-    func toDomain() -> ChatKeyboard? {
+    func toDomain(reacted: ReactedMetadataDto?) -> ChatKeyboard? {
         if let markup {
             return .buttons(
                 .init(
@@ -297,7 +364,8 @@ extension InteractiveMessageDto {
                                 $0.toDomain()
                             }
                         )
-                    }
+                    },
+                    selection: reacted?.toDomain()
                 )
             )
         }
@@ -313,7 +381,8 @@ extension InteractiveMessageDto {
                                 $0.toDomain()
                             }
                         )
-                    }
+                    },
+                    selection: reacted?.toDomain()
                 )
             )
         }
