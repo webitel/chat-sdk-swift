@@ -58,8 +58,64 @@ internal final class DialogImpl: Dialog {
     func sendAction(_ action: MessageAction) async throws {
         try await client.sendAction(action)
     }
-    
-    
+
+
+    func sendTyping(request: TypingRequest, completion: @escaping (Result<Void, ChatError>) -> Void) {
+        client.sendTyping(dialogId: id, request: request, completion: completion)
+    }
+
+
+    func sendTyping(request: TypingRequest) async throws {
+        try await client.sendTyping(dialogId: id, request: request)
+    }
+
+
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        sendId: String?,
+        completion: @escaping (Result<ReactionResult, ChatError>) -> Void
+    ) {
+        client.setReaction(messageId: messageId, emoji: emoji, sendId: sendId, completion: completion)
+    }
+
+
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        sendId: String?
+    ) async throws -> ReactionResult {
+        try await client.setReaction(messageId: messageId, emoji: emoji, sendId: sendId)
+    }
+
+
+    func deleteMessages(
+        ids: [String],
+        completion: @escaping (Result<DeleteMessagesResult, ChatError>) -> Void
+    ) {
+        client.deleteMessages(ids: ids, completion: completion)
+    }
+
+
+    func deleteMessages(ids: [String]) async throws -> DeleteMessagesResult {
+        try await client.deleteMessages(ids: ids)
+    }
+
+
+    func editMessage(
+        messageId: String,
+        text: String,
+        completion: @escaping (Result<EditMessageResult, ChatError>) -> Void
+    ) {
+        client.editMessage(messageId: messageId, text: text, completion: completion)
+    }
+
+
+    func editMessage(messageId: String, text: String) async throws -> EditMessageResult {
+        try await client.editMessage(messageId: messageId, text: text)
+    }
+
+
     func addObserver(_ observer: any ChatEventObserver) {
         client.addDialogObserver(dialogId: id, observer: observer)
     }
@@ -85,8 +141,34 @@ internal final class DialogImpl: Dialog {
     func applyMessage(_ message: Message) {
         state.lastMessage = message
     }
-    
-    
+
+
+    func applyReactions(messageId: String, reactions: [MessageReaction]) {
+        guard state.lastMessage?.id == messageId else { return }
+        state.lastMessage?.reactions = reactions
+    }
+
+
+    func applyDeletion(messageId: String) {
+        guard state.lastMessage?.id == messageId else { return }
+        state.lastMessage = nil
+    }
+
+
+    @discardableResult
+    func applyEdit(_ message: Message) -> Message {
+        guard state.lastMessage?.id == message.id else { return message }
+
+        var merged = message
+        if merged.reactions.isEmpty {
+            merged.reactions = state.lastMessage?.reactions ?? []
+        }
+
+        state.lastMessage = merged
+        return merged
+    }
+
+
     static func == (lhs: DialogImpl, rhs: DialogImpl) -> Bool {
         return lhs.id == rhs.id
     }

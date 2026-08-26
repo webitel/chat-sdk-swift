@@ -11,6 +11,10 @@ import Foundation
 internal protocol RealtimeObserver: AnyObject {
 
     func onMessage(_ message: MessageDto)
+    func onTyping(_ event: TypingEventDto)
+    func onMessageReaction(_ event: MessageReactionEventDto)
+    func onMessageDeleted(_ event: MessageDeletedEventDto)
+    func onMessageEdited(_ event: MessageEditedEventDto)
     func onNewDialog(_ dialog: DialogDto)
     func onError(_ error: ChatError)
     func onOpen()

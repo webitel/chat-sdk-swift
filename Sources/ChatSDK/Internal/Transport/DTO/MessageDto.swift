@@ -12,11 +12,12 @@ internal struct MessageDto: Decodable {
     let id: String
     let dialogId: String
     let createdAt: Int64
-    let editedAt: Int64
+    let editedAt: Int64?
     let from: ParticipantDto
     let sendId: String?
     let body: String?
     let content: MessageContentDto
+    let reactions: [MessageReactionDto]
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -29,6 +30,7 @@ internal struct MessageDto: Decodable {
         case interactive
         case contact
         case location
+        case reactions
     }
 
     init(from decoder: Decoder) throws {
@@ -43,12 +45,10 @@ internal struct MessageDto: Decodable {
             key: .createdAt
         )
 
-        editedAt = (
-            try? Self.decodeTimestamp(
-                container,
-                key: .editedAt
-            )
-        ) ?? createdAt
+        editedAt = try? Self.decodeTimestamp(
+            container,
+            key: .editedAt
+        )
 
         from = try container.decode(
             ParticipantDto.self,
@@ -59,6 +59,11 @@ internal struct MessageDto: Decodable {
             String.self,
             forKey: .sendId
         )
+
+        reactions = (try? container.decodeIfPresent(
+            [MessageReactionDto].self,
+            forKey: .reactions
+        )) ?? []
 
         content = try MessageContentDto(from: decoder)
     }
@@ -91,7 +96,7 @@ internal extension MessageDto {
         let from = self.from.toDomain()
 
         let createdDate = Date(timeIntervalSince1970: Double(createdAt) / 1000.0)
-        let editedDate = Date(timeIntervalSince1970: Double(editedAt) / 1000.0)
+        let editedDate = editedAt.map { Date(timeIntervalSince1970: Double($0) / 1000.0) }
         
         return Message(
             id: id,
@@ -101,7 +106,8 @@ internal extension MessageDto {
             from: from,
             content: content.toDomain(),
             sendId: sendId,
-            isOutgoing: currentUserId == from.contact.id.sub
+            isOutgoing: currentUserId == from.contact.id.sub,
+            reactions: (try? reactions.map { try $0.toDomain() }) ?? []
         )
     }
 }

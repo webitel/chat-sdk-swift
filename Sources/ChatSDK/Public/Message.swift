@@ -19,8 +19,8 @@ public struct Message: Hashable, Codable {
     /// Message creation timestamp
     public let createdAt: Date
 
-    /// Last edit timestamp
-    public let editedAt: Date
+    /// Last edit timestamp, nil if the message was never edited
+    public let editedAt: Date?
 
     /// Sender of the message
     public let from: Participant
@@ -33,16 +33,20 @@ public struct Message: Hashable, Codable {
 
     /// Indicates whether message is outgoing
     public let isOutgoing: Bool
+    
+    /// Current set of reactions on this message.
+    public var reactions: [MessageReaction]
 
     public init(
         id: String,
         dialogId: String,
         createdAt: Date,
-        editedAt: Date,
+        editedAt: Date?,
         from: Participant,
         content: MessageContent,
         sendId: String? = nil,
         isOutgoing: Bool,
+        reactions: [MessageReaction]
     ) {
         self.id = id
         self.dialogId = dialogId
@@ -52,6 +56,7 @@ public struct Message: Hashable, Codable {
         self.content = content
         self.sendId = sendId
         self.isOutgoing = isOutgoing
+        self.reactions = reactions
     }
 }
 
@@ -59,6 +64,6 @@ public struct Message: Hashable, Codable {
 public extension Message {
     /// Indicates whether the message was edited after creation.
     var isEdited: Bool {
-        editedAt > createdAt
+        editedAt != nil
     }
 }

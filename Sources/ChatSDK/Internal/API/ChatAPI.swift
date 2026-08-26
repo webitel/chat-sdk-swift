@@ -40,4 +40,24 @@ internal protocol ChatAPI: AnyObject {
     func getOrCreateDialog(
         contactId: ContactID
     ) async throws -> DialogDto
+
+    func sendTyping(
+        dialogId: String,
+        request: TypingRequest
+    ) async throws
+
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        sendId: String?
+    ) async throws -> ReactionResponseDto
+
+    func deleteMessages(
+        ids: [String]
+    ) async throws -> DeleteMessagesResponseDto
+
+    func editMessage(
+        messageId: String,
+        text: String
+    ) async throws -> EditMessageResponseDto
 }

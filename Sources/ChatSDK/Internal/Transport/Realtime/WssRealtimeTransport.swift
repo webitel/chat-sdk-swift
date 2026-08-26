@@ -286,7 +286,19 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
                 }
                 
                 handleMessageEvent(payload)
-                
+
+            case .typing:
+                handleTypingEvent(payload)
+
+            case .messageReaction:
+                handleMessageReactionEvent(payload)
+
+            case .messageDeleted:
+                handleMessageDeletedEvent(payload)
+
+            case .messageEdited:
+                handleMessageEditedEvent(payload)
+
             case .ack:
                 handleAck(payload)
                 
@@ -320,6 +332,66 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     }
     
     
+    private func handleTypingEvent(
+        _ payload: [String: Any]
+    ) {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.typing.rawValue]!)
+            let dto = try jsonDecoder.decode(TypingEventDto.self, from: data)
+
+            observer?.onTyping(dto)
+
+        } catch {
+            logger.warning("Failed to decode typing event: \(error)")
+        }
+    }
+
+
+    private func handleMessageReactionEvent(
+        _ payload: [String: Any]
+    ) {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageReaction.rawValue]!)
+            let dto = try jsonDecoder.decode(MessageReactionEventDto.self, from: data)
+
+            observer?.onMessageReaction(dto)
+
+        } catch {
+            logger.warning("Failed to decode message reaction event: \(error)")
+        }
+    }
+
+
+    private func handleMessageDeletedEvent(
+        _ payload: [String: Any]
+    ) {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageDeleted.rawValue]!)
+            let dto = try jsonDecoder.decode(MessageDeletedEventDto.self, from: data)
+
+            observer?.onMessageDeleted(dto)
+
+        } catch {
+            logger.warning("Failed to decode message deleted event: \(error)")
+        }
+    }
+
+
+    private func handleMessageEditedEvent(
+        _ payload: [String: Any]
+    ) {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageEdited.rawValue]!)
+            let dto = try jsonDecoder.decode(MessageEditedEventDto.self, from: data)
+
+            observer?.onMessageEdited(dto)
+
+        } catch {
+            logger.warning("Failed to decode message edited event: \(error)")
+        }
+    }
+
+
     private func handleDialogCreated(
         _ payload: [String: Any]
     ) {

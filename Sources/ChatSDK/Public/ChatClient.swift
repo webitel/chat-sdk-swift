@@ -208,8 +208,88 @@ public protocol ChatClient {
     func sendAction(
         _ action: MessageAction
     ) async throws
-    
-    
+
+
+    /// Sets or updates the current user's reaction on a message using a completion handler.
+    ///
+    /// Only one reaction per user is allowed per message; sending a new emoji
+    /// replaces the previous one. Use `removeReaction` to clear it.
+    ///
+    /// - Parameters:
+    ///   - messageId: Identifier of the message being reacted to.
+    ///   - emoji: Emoji to set as the reaction.
+    ///   - sendId: Optional client-generated request identifier.
+    ///   - completion: Completion handler returning the resulting reaction state or error.
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        sendId: String?,
+        completion: @escaping (Result<ReactionResult, ChatError>) -> Void
+    )
+
+
+    /// Sets or updates the current user's reaction on a message using async/await.
+    ///
+    /// - Parameters:
+    ///   - messageId: Identifier of the message being reacted to.
+    ///   - emoji: Emoji to set as the reaction.
+    ///   - sendId: Optional client-generated request identifier.
+    /// - Returns: The resulting reaction state.
+    /// - Throws: `ChatError` if the operation fails.
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        sendId: String?
+    ) async throws -> ReactionResult
+
+
+    /// Deletes messages by identifier using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - ids: Identifiers of the messages to delete.
+    ///   - completion: Completion handler returning the deletion result or error.
+    func deleteMessages(
+        ids: [String],
+        completion: @escaping (Result<DeleteMessagesResult, ChatError>) -> Void
+    )
+
+
+    /// Deletes messages by identifier using async/await.
+    ///
+    /// - Parameter ids: Identifiers of the messages to delete.
+    /// - Returns: The deletion result, including skipped identifiers.
+    /// - Throws: `ChatError` if the operation fails.
+    func deleteMessages(
+        ids: [String]
+    ) async throws -> DeleteMessagesResult
+
+
+    /// Edits the text of a message using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - messageId: Identifier of the message to edit.
+    ///   - text: New text of the message.
+    ///   - completion: Completion handler returning the edit result or error.
+    func editMessage(
+        messageId: String,
+        text: String,
+        completion: @escaping (Result<EditMessageResult, ChatError>) -> Void
+    )
+
+
+    /// Edits the text of a message using async/await.
+    ///
+    /// - Parameters:
+    ///   - messageId: Identifier of the message to edit.
+    ///   - text: New text of the message.
+    /// - Returns: The edit result, including the edit timestamp.
+    /// - Throws: `ChatError` if the operation fails.
+    func editMessage(
+        messageId: String,
+        text: String
+    ) async throws -> EditMessageResult
+
+
     /// Starts an asynchronous file upload operation.
     ///
     /// Upload progress and completion events are delivered
@@ -276,4 +356,62 @@ public protocol ChatClient {
     ///
     /// - Parameter observer: Observer to remove.
     func removeConnectionObserver(_ observer: ConnectionObserver)
+}
+
+
+public extension ChatClient {
+
+    /// Sets or updates the current user's reaction on a message using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - messageId: Identifier of the message being reacted to.
+    ///   - emoji: Emoji to set as the reaction.
+    ///   - completion: Completion handler returning the resulting reaction state or error.
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        completion: @escaping (Result<ReactionResult, ChatError>) -> Void
+    ) {
+        setReaction(messageId: messageId, emoji: emoji, sendId: nil, completion: completion)
+    }
+
+
+    /// Sets or updates the current user's reaction on a message using async/await.
+    ///
+    /// - Parameters:
+    ///   - messageId: Identifier of the message being reacted to.
+    ///   - emoji: Emoji to set as the reaction.
+    /// - Returns: The resulting reaction state.
+    /// - Throws: `ChatError` if the operation fails.
+    func setReaction(
+        messageId: String,
+        emoji: String
+    ) async throws -> ReactionResult {
+        try await setReaction(messageId: messageId, emoji: emoji, sendId: nil)
+    }
+
+
+    /// Removes the current user's reaction from a message, if any, using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - messageId: Identifier of the message to clear the reaction from.
+    ///   - completion: Completion handler returning the resulting reaction state or error.
+    func removeReaction(
+        messageId: String,
+        completion: @escaping (Result<ReactionResult, ChatError>) -> Void
+    ) {
+        setReaction(messageId: messageId, emoji: "", sendId: nil, completion: completion)
+    }
+
+
+    /// Removes the current user's reaction from a message, if any, using async/await.
+    ///
+    /// - Parameter messageId: Identifier of the message to clear the reaction from.
+    /// - Returns: The resulting reaction state.
+    /// - Throws: `ChatError` if the operation fails.
+    func removeReaction(
+        messageId: String
+    ) async throws -> ReactionResult {
+        try await setReaction(messageId: messageId, emoji: "", sendId: nil)
+    }
 }

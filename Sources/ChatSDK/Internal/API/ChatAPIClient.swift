@@ -14,14 +14,19 @@ internal class ChatAPIClient: ChatAPI {
     private let headerProvider: HeaderProvider
     private let context: ClientContext
     
-    private let dialogsPath = "/api/v1/threads"
-    private let contactsPath = "/api/v1/contacts"
-    private let registerPath = "/api/v1/auth/devices"
-    private let sendTextPath = "/api/v1/messages/text"
-    private let sendFilePath = "/api/v1/messages/document"
-    private let sendContactPath = "/api/v1/messages/contact"
-    private let sendLocationPath = "/api/v1/messages/location"
-    private let sendActionPath = "/api/v1/messages/interactive"
+    private enum APIPath {
+        static let threads = "/api/v1/threads"
+        static let contacts = "/api/v1/contacts"
+        static let devices = "/api/v1/auth/devices"
+        static let messages = "/api/v1/messages"
+
+        static let deleteMessages = "\(messages)/delete"
+        static let textMessage = "\(messages)/text"
+        static let documentMessage = "\(messages)/document"
+        static let contactMessage = "\(messages)/contact"
+        static let locationMessage = "\(messages)/location"
+        static let interactiveMessage = "\(messages)/interactive"
+    }
     
     private let logger = SDKLogger.make("chat.api")
     
@@ -174,6 +179,88 @@ internal class ChatAPIClient: ChatAPI {
     }
     
     
+    func sendTyping(
+        dialogId: String,
+        request: TypingRequest
+    ) async throws {
+
+        guard let urlRequest = buildSendTypingRequest(
+            dialogId: dialogId,
+            request: request
+        ) else {
+            throw ChatError.invalidURL
+        }
+
+        _ = try await perform(urlRequest) {
+            try self.parseRegisterResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+
+
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        sendId: String?
+    ) async throws -> ReactionResponseDto {
+
+        guard let urlRequest = buildSendReactionRequest(
+            messageId: messageId,
+            emoji: emoji,
+            sendId: sendId
+        ) else {
+            throw ChatError.invalidURL
+        }
+
+        return try await perform(urlRequest) {
+            try self.parseReactionResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+
+
+    func deleteMessages(
+        ids: [String]
+    ) async throws -> DeleteMessagesResponseDto {
+
+        guard let urlRequest = buildDeleteMessagesRequest(ids: ids) else {
+            throw ChatError.invalidURL
+        }
+
+        return try await perform(urlRequest) {
+            try self.parseDeleteMessagesResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+
+
+    func editMessage(
+        messageId: String,
+        text: String
+    ) async throws -> EditMessageResponseDto {
+
+        guard let urlRequest = buildEditMessageRequest(
+            messageId: messageId,
+            text: text
+        ) else {
+            throw ChatError.invalidURL
+        }
+
+        return try await perform(urlRequest) {
+            try self.parseEditMessageResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+
+
     @discardableResult
     func sendMessage(
         to target: MessageTarget,
@@ -242,7 +329,7 @@ internal class ChatAPIClient: ChatAPI {
         _ type: PushTokenType
     ) -> URLRequest? {
         
-        guard let url = buildURL(path: registerPath) else {
+        guard let url = buildURL(path: APIPath.devices) else {
             return nil
         }
         
@@ -280,7 +367,7 @@ internal class ChatAPIClient: ChatAPI {
         _ contactId: ContactID
     ) throws -> URLRequest {
         
-        guard let url = buildURL(path: dialogsPath) else {
+        guard let url = buildURL(path: APIPath.threads) else {
             throw ChatError.invalidURL
         }
         
@@ -380,7 +467,7 @@ internal class ChatAPIClient: ChatAPI {
     ) -> RequestComponents? {
         switch options.content {
             case .text(let content):
-                guard let url = buildURL(path: sendTextPath) else {
+                guard let url = buildURL(path: APIPath.textMessage) else {
                     return nil
                 }
 
@@ -396,7 +483,7 @@ internal class ChatAPIClient: ChatAPI {
                 )
 
             case .attachments(let attachments):
-                guard let url = buildURL(path: sendFilePath) else {
+                guard let url = buildURL(path: APIPath.documentMessage) else {
                     return nil
                 }
 
@@ -413,7 +500,7 @@ internal class ChatAPIClient: ChatAPI {
                 )
 
             case .contact(let content):
-                guard let url = buildURL(path: sendContactPath) else {
+                guard let url = buildURL(path: APIPath.contactMessage) else {
                     return nil
                 }
                 
@@ -431,7 +518,7 @@ internal class ChatAPIClient: ChatAPI {
                 )
 
             case .location(let content):
-                guard let url = buildURL(path: sendLocationPath) else {
+                guard let url = buildURL(path: APIPath.locationMessage) else {
                     return nil
                 }
 
@@ -450,7 +537,7 @@ internal class ChatAPIClient: ChatAPI {
                 )
 
             case .composite(let content):
-                guard let url = buildURL(path: sendFilePath) else {
+                guard let url = buildURL(path: APIPath.documentMessage) else {
                     return nil
                 }
 
@@ -501,7 +588,7 @@ internal class ChatAPIClient: ChatAPI {
         switch action {
             case .buttonClick(let action):
                 guard let url = buildURL(
-                    path: "\(sendActionPath)/\(action.messageId)/callback"
+                    path: "\(APIPath.interactiveMessage)/\(action.messageId)/callback"
                 ) else {
                     return nil
                 }
@@ -519,21 +606,212 @@ internal class ChatAPIClient: ChatAPI {
     }
     
     
+    private func buildSendTypingRequest(
+        dialogId: String,
+        request: TypingRequest
+    ) -> URLRequest? {
+
+        guard let url = buildURL(
+            path: "\(APIPath.threads)/\(dialogId)/typing"
+        ) else {
+            return nil
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        urlRequest.httpBody = try? jsonEncoder.encode(
+            TypingRequestDto(request)
+        )
+
+        return urlRequest
+    }
+
+
+    private func buildSendReactionRequest(
+        messageId: String,
+        emoji: String,
+        sendId: String?
+    ) -> URLRequest? {
+
+        guard let url = buildURL(
+            path: "\(APIPath.messages)/\(messageId)/reaction"
+        ) else {
+            return nil
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        urlRequest.httpBody = try? jsonEncoder.encode(
+            ReactionRequestDto(emoji: emoji, send_id: sendId)
+        )
+
+        return urlRequest
+    }
+
+
+    private func buildDeleteMessagesRequest(
+        ids: [String]
+    ) -> URLRequest? {
+
+        guard let url = buildURL(path: APIPath.deleteMessages) else {
+            return nil
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        urlRequest.httpBody = try? jsonEncoder.encode(
+            DeleteMessagesRequestDto(ids: ids)
+        )
+
+        return urlRequest
+    }
+
+
+    private func buildEditMessageRequest(
+        messageId: String,
+        text: String
+    ) -> URLRequest? {
+
+        guard let url = buildURL(
+            path: "\(APIPath.messages)/\(messageId)"
+        ) else {
+            return nil
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "PATCH"
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        urlRequest.httpBody = try? jsonEncoder.encode(
+            EditMessageRequestDto(body: text)
+        )
+
+        return urlRequest
+    }
+
+
     private struct RequestComponents {
         let url: URL
         let body: Data?
     }
-    
-    
+
+
     private func parseRegisterResponse(
         data: Data,
         response: HTTPURLResponse
     ) throws {
-        
+
         let _ = try response.validate(data: data, logger: logger)
     }
-    
-    
+
+
+    private func parseReactionResponse(
+        data: Data,
+        response: HTTPURLResponse
+    ) throws -> ReactionResponseDto {
+
+        let validData =
+            try response.validate(data: data, logger: logger)
+
+        do {
+            return try jsonDecoder.decode(
+                ReactionResponseDto.self,
+                from: validData
+            )
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "reaction response"
+            )
+            throw error
+        }
+    }
+
+
+    private func parseDeleteMessagesResponse(
+        data: Data,
+        response: HTTPURLResponse
+    ) throws -> DeleteMessagesResponseDto {
+
+        let validData =
+            try response.validate(data: data, logger: logger)
+
+        do {
+            return try jsonDecoder.decode(
+                DeleteMessagesResponseDto.self,
+                from: validData
+            )
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "delete messages response"
+            )
+            throw error
+        }
+    }
+
+
+    private func parseEditMessageResponse(
+        data: Data,
+        response: HTTPURLResponse
+    ) throws -> EditMessageResponseDto {
+
+        let validData =
+            try response.validate(data: data, logger: logger)
+
+        do {
+            return try jsonDecoder.decode(
+                EditMessageResponseDto.self,
+                from: validData
+            )
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "edit message response"
+            )
+            throw error
+        }
+    }
+
+
+
     private func parseDialogResponse(
         data: Data,
         response: HTTPURLResponse,
@@ -766,7 +1044,7 @@ internal class ChatAPIClient: ChatAPI {
         
         var components = URLComponents(
             url: context.baseURL
-                .appendingPathComponent(contactsPath),
+                .appendingPathComponent(APIPath.contacts),
             resolvingAgainstBaseURL: false
         )
         
@@ -785,7 +1063,7 @@ internal class ChatAPIClient: ChatAPI {
 
         var components = URLComponents(
             url: context.baseURL
-                .appendingPathComponent(dialogsPath),
+                .appendingPathComponent(APIPath.threads),
             resolvingAgainstBaseURL: false
         )
 

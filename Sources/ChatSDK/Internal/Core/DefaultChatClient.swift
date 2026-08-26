@@ -367,8 +367,141 @@ internal class DefaultChatClient: ChatClient {
             try await self.apiProvider.sendAction(action: action)
         }
     }
-    
-    
+
+
+    func sendTyping(
+        dialogId: String,
+        request: TypingRequest,
+        completion: @escaping (Result<Void, ChatError>) -> Void
+    ) {
+        Task {
+            do {
+                try await self.sendTyping(dialogId: dialogId, request: request)
+
+                completion(.success(Void()))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+
+
+    func sendTyping(
+        dialogId: String,
+        request: TypingRequest
+    ) async throws {
+        try await performWithAuthRetry {
+
+            try await self.apiProvider.sendTyping(dialogId: dialogId, request: request)
+        }
+    }
+
+
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        sendId: String?,
+        completion: @escaping (Result<ReactionResult, ChatError>) -> Void
+    ) {
+        Task {
+            do {
+                let result = try await self.setReaction(messageId: messageId, emoji: emoji, sendId: sendId)
+
+                completion(.success(result))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+
+
+    func setReaction(
+        messageId: String,
+        emoji: String,
+        sendId: String?
+    ) async throws -> ReactionResult {
+        try await performWithAuthRetry {
+
+            let dto = try await self.apiProvider.setReaction(
+                messageId: messageId,
+                emoji: emoji,
+                sendId: sendId
+            )
+
+            return try dto.toDomain()
+        }
+    }
+
+
+    func deleteMessages(
+        ids: [String],
+        completion: @escaping (Result<DeleteMessagesResult, ChatError>) -> Void
+    ) {
+        Task {
+            do {
+                let result = try await self.deleteMessages(ids: ids)
+
+                completion(.success(result))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+
+
+    func deleteMessages(
+        ids: [String]
+    ) async throws -> DeleteMessagesResult {
+        try await performWithAuthRetry {
+
+            let dto = try await self.apiProvider.deleteMessages(ids: ids)
+
+            return try dto.toDomain()
+        }
+    }
+
+
+    func editMessage(
+        messageId: String,
+        text: String,
+        completion: @escaping (Result<EditMessageResult, ChatError>) -> Void
+    ) {
+        Task {
+            do {
+                let result = try await self.editMessage(messageId: messageId, text: text)
+
+                completion(.success(result))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+
+
+    func editMessage(
+        messageId: String,
+        text: String
+    ) async throws -> EditMessageResult {
+        try await performWithAuthRetry {
+
+            let dto = try await self.apiProvider.editMessage(
+                messageId: messageId,
+                text: text
+            )
+
+            return try dto.toDomain()
+        }
+    }
+
+
     func download(request: DownloadRequest, observer: any DownloadObserver) -> any Cancellable {
         fileTransferClient.download(request, observer)
     }
@@ -474,6 +607,67 @@ extension DefaultChatClient: RealtimeObserver {
     }
     
     
+    func onTyping(_ dto: TypingEventDto) {
+        self.hub.dispatch(
+            ChatEvent.activity(
+                ActivityEvent.typing(
+                    dialogId: dto.dialogId,
+                    member: dto.member.toDomain(),
+                    previewText: dto.previewText,
+                    timeoutMs: dto.timeoutMs
+                )
+            )
+        )
+    }
+
+
+    func onMessageReaction(_ dto: MessageReactionEventDto) {
+        do {
+            let reactions = try dto.reactions.map { try $0.toDomain() }
+
+            self.dialogFactory.get(dto.dialogId)?
+                .applyReactions(messageId: dto.messageId, reactions: reactions)
+
+            self.hub.dispatch(
+                ChatEvent.message(
+                    MessageEvent.reactionsChanged(
+                        dialogId: dto.dialogId,
+                        messageId: dto.messageId,
+                        reactions: reactions
+                    )
+                )
+            )
+        } catch {
+            logger.warning("Failed to map message reaction event: \(error)")
+        }
+    }
+
+
+    func onMessageDeleted(_ dto: MessageDeletedEventDto) {
+        let deletion = dto.toDomain()
+
+        self.dialogFactory.get(dto.dialogId)?.applyDeletion(messageId: dto.messageId)
+
+        self.hub.dispatch(
+            ChatEvent.message(
+                MessageEvent.deleted(dialogId: dto.dialogId, deletion: deletion)
+            )
+        )
+    }
+
+
+    func onMessageEdited(_ dto: MessageEditedEventDto) {
+        let message = dto.toDomain(self.authManager.currentContact?.id)
+        let merged = self.dialogFactory.get(dto.dialogId)?.applyEdit(message) ?? message
+
+        self.hub.dispatch(
+            ChatEvent.message(
+                MessageEvent.edited(dialogId: dto.dialogId, message: merged)
+            )
+        )
+    }
+
+
     func onNewDialog(_ dialog: DialogDto) {
         let newDialog = self.dialogFactory.getOrCreate(client: self, dto: dialog)
         

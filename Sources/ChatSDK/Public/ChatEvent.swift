@@ -13,11 +13,10 @@ public enum ChatEvent {
 
     case message(MessageEvent)
     case dialog(DialogEvent)
-    case state(StateEvent)
+    case activity(ActivityEvent)
+    case receipt(ReceiptEvent)
 
-    /// Dialog identifier associated with the event.
     public var dialogId: String {
-
         switch self {
         case .message(let event):
             return event.dialogId
@@ -25,7 +24,10 @@ public enum ChatEvent {
         case .dialog(let event):
             return event.dialogId
 
-        case .state(let event):
+        case .activity(let event):
+            return event.dialogId
+
+        case .receipt(let event):
             return event.dialogId
         }
     }
@@ -42,20 +44,26 @@ public enum MessageEvent {
 
     case edited(
         dialogId: String,
-        messageId: String,
-        newText: String
+        message: Message
     )
 
     case deleted(
         dialogId: String,
-        messageId: String
+        deletion: MessageDeletion
+    )
+    
+    case reactionsChanged(
+        dialogId: String,
+        messageId: String,
+        reactions: [MessageReaction]
     )
 
     var dialogId: String {
         switch self {
         case .received(let id, _),
-             .edited(let id, _, _),
-             .deleted(let id, _):
+             .edited(let id, _),
+             .deleted(let id, _),
+             .reactionsChanged(let id, _, _):
             return id
         }
     }
@@ -79,24 +87,64 @@ public enum DialogEvent {
 }
 
 
-// MARK: - State Events
-public enum StateEvent {
+public enum ReceiptEvent {
 
-    case typing(
+    case delivered(
         dialogId: String,
-        userId: String
+        member: Participant,
+        sequence: Int64
     )
 
     case read(
         dialogId: String,
+        member: Participant,
+        sequence: Int64
+    )
+
+    case deliveryFailed(
+        dialogId: String,
         messageId: String,
-        userId: String
+        member: Participant,
+        error: String
     )
 
     var dialogId: String {
         switch self {
-        case .typing(let id, _),
-             .read(let id, _, _):
+        case .delivered(let id, _, _),
+             .read(let id, _, _),
+             .deliveryFailed(let id, _, _, _):
+            return id
+        }
+    }
+}
+
+
+public enum ActivityEvent {
+
+    case typing(
+        dialogId: String,
+        member: Participant,
+        previewText: String?,
+        timeoutMs: Int?
+    )
+
+//    case recordingAudio(
+//        dialogId: String,
+//        member: Participant,
+//        timeoutMs: Int?
+//    )
+//
+//    case recordingVideo(
+//        dialogId: String,
+//        member: Participant,
+//        timeoutMs: Int?
+//    )
+
+    var dialogId: String {
+        switch self {
+            case .typing(let id, _, _, _):
+//             .recordingAudio(let id, _, _),
+//             .recordingVideo(let id, _, _):
             return id
         }
     }
