@@ -17,12 +17,17 @@ public struct MessageOptions {
     /// Client-generated identifier used to match sent messages.
     public let sendId: String
 
+    /// Identifier of the message this message replies to, if any.
+    public var replyToMessageId: String?
+
     public init(
         content: SendContent,
-        sendId: String = UUID().uuidString
+        sendId: String = UUID().uuidString,
+        replyToMessageId: String? = nil
     ) {
         self.content = content
         self.sendId = sendId
+        self.replyToMessageId = replyToMessageId
     }
 }
 

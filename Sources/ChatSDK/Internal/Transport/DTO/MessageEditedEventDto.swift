@@ -16,6 +16,7 @@ internal struct MessageEditedEventDto: Decodable {
     let createdAt: Int64
     let editedAt: Int64
     let reactions: [MessageReactionDto]
+    let replyTo: MessageReplyDto?
 
     private enum CodingKeys: String, CodingKey {
         case messageId = "id"
@@ -25,6 +26,7 @@ internal struct MessageEditedEventDto: Decodable {
         case createdAt = "created_at"
         case editedAt = "edited_at"
         case reactions
+        case replyTo = "reply_to"
     }
 
     init(from decoder: Decoder) throws {
@@ -40,6 +42,11 @@ internal struct MessageEditedEventDto: Decodable {
             [MessageReactionDto].self,
             forKey: .reactions
         )) ?? []
+
+        replyTo = try? container.decodeIfPresent(
+            MessageReplyDto.self,
+            forKey: .replyTo
+        )
     }
 
     private static func decodeTimestamp(
@@ -78,7 +85,8 @@ internal extension MessageEditedEventDto {
             content: .text(body),
             sendId: nil,
             isOutgoing: currentUserId == from.contact.id.sub,
-            reactions: (try? reactions.map { try $0.toDomain() }) ?? []
+            reactions: (try? reactions.map { try $0.toDomain() }) ?? [],
+            reply: replyTo?.toDomain()
         )
     }
 }

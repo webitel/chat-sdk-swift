@@ -9,32 +9,36 @@ import Foundation
 
 
 internal struct SendTextMessageRequestDto: Encodable {
-    
+
     let body: String?
     let send_id: String
     let to: TargetDto
-    
+    let reply_to_message_id: String?
+
     init(
         target: MessageTarget,
         text: String,
         sendId: String,
+        replyToMessageId: String? = nil,
     ) {
         self.body = text
         self.send_id = sendId
         self.to = TargetDto(target)
+        self.reply_to_message_id = replyToMessageId
     }
 }
 
 
 internal struct SendLocationRequestDto: Encodable {
-    
+
     let name: String
     let address: String
     let latitude: Double
     let longitude: Double
     let send_id: String
     let to: TargetDto
-    
+    let reply_to_message_id: String?
+
     init(
         target: MessageTarget,
         name: String,
@@ -42,6 +46,7 @@ internal struct SendLocationRequestDto: Encodable {
         latitude: Double,
         longitude: Double,
         sendId: String,
+        replyToMessageId: String? = nil,
     ) {
         self.name = name
         self.address = address
@@ -49,30 +54,34 @@ internal struct SendLocationRequestDto: Encodable {
         self.longitude = longitude
         self.send_id = sendId
         self.to = TargetDto(target)
+        self.reply_to_message_id = replyToMessageId
     }
 }
 
 
 internal struct SendContactRequestDto: Encodable {
-    
+
     let name: String
     let phone_number: String?
     let email: String?
     let send_id: String
     let to: TargetDto
-    
+    let reply_to_message_id: String?
+
     init(
         target: MessageTarget,
         name: String,
         phoneNumber: String?,
         email: String?,
         sendId: String,
+        replyToMessageId: String? = nil,
     ) {
         self.name = name
         self.phone_number = phoneNumber
         self.email = email
         self.send_id = sendId
         self.to = TargetDto(target)
+        self.reply_to_message_id = replyToMessageId
     }
 }
 
@@ -82,12 +91,14 @@ internal struct SendAttachmentsRequestDto: Encodable {
     let send_id: String
     let to: TargetDto
     let documents: [SendAttachmentDto]
+    let reply_to_message_id: String?
 
     init(
         target: MessageTarget,
         text: String?,
         attachments: [SendAttachment],
-        sendId: String
+        sendId: String,
+        replyToMessageId: String? = nil
     ) {
         self.body = text
         self.send_id = sendId
@@ -95,6 +106,7 @@ internal struct SendAttachmentsRequestDto: Encodable {
         self.documents = attachments.map {
             $0.toDto()
         }
+        self.reply_to_message_id = replyToMessageId
     }
 }
 

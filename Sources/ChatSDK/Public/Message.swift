@@ -37,6 +37,9 @@ public struct Message: Hashable, Codable {
     /// Current set of reactions on this message.
     public var reactions: [MessageReaction]
 
+    /// Full quoted message this message replies to, when returned by the server.
+    public let reply: MessageReply?
+
     public init(
         id: String,
         dialogId: String,
@@ -46,7 +49,8 @@ public struct Message: Hashable, Codable {
         content: MessageContent,
         sendId: String? = nil,
         isOutgoing: Bool,
-        reactions: [MessageReaction]
+        reactions: [MessageReaction],
+        reply: MessageReply? = nil
     ) {
         self.id = id
         self.dialogId = dialogId
@@ -57,6 +61,7 @@ public struct Message: Hashable, Codable {
         self.sendId = sendId
         self.isOutgoing = isOutgoing
         self.reactions = reactions
+        self.reply = reply
     }
 }
 

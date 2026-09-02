@@ -8,6 +8,28 @@
 import Foundation
 
 
+fileprivate func decodeTimestamp<Key: CodingKey>(
+    _ container: KeyedDecodingContainer<Key>,
+    key: Key
+) throws -> Int64 {
+
+    if let intValue = try? container.decode(Int64.self, forKey: key) {
+        return intValue
+    }
+
+    if let stringValue = try? container.decode(String.self, forKey: key),
+       let intValue = Int64(stringValue) {
+        return intValue
+    }
+
+    throw DecodingError.dataCorruptedError(
+        forKey: key,
+        in: container,
+        debugDescription: "Invalid timestamp format"
+    )
+}
+
+
 internal struct MessageDto: Decodable {
     let id: String
     let dialogId: String
@@ -18,6 +40,7 @@ internal struct MessageDto: Decodable {
     let body: String?
     let content: MessageContentDto
     let reactions: [MessageReactionDto]
+    let replyTo: MessageReplyDto?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -31,6 +54,7 @@ internal struct MessageDto: Decodable {
         case contact
         case location
         case reactions
+        case replyTo = "reply_to"
     }
 
     init(from decoder: Decoder) throws {
@@ -40,12 +64,12 @@ internal struct MessageDto: Decodable {
         dialogId = try container.decode(String.self, forKey: .dialogId)
         body = try? container.decodeIfPresent(String.self, forKey: .body)
 
-        createdAt = try Self.decodeTimestamp(
+        createdAt = try decodeTimestamp(
             container,
             key: .createdAt
         )
 
-        editedAt = try? Self.decodeTimestamp(
+        editedAt = try? decodeTimestamp(
             container,
             key: .editedAt
         )
@@ -65,28 +89,12 @@ internal struct MessageDto: Decodable {
             forKey: .reactions
         )) ?? []
 
-        content = try MessageContentDto(from: decoder)
-    }
-    
-    private static func decodeTimestamp(
-        _ container: KeyedDecodingContainer<CodingKeys>,
-        key: CodingKeys
-    ) throws -> Int64 {
-
-        if let intValue = try? container.decode(Int64.self, forKey: key) {
-            return intValue
-        }
-
-        if let stringValue = try? container.decode(String.self, forKey: key),
-           let intValue = Int64(stringValue) {
-            return intValue
-        }
-
-        throw DecodingError.dataCorruptedError(
-            forKey: key,
-            in: container,
-            debugDescription: "Invalid timestamp format"
+        replyTo = try? container.decodeIfPresent(
+            MessageReplyDto.self,
+            forKey: .replyTo
         )
+
+        content = try MessageContentDto(from: decoder)
     }
 }
 
@@ -107,8 +115,79 @@ internal extension MessageDto {
             content: content.toDomain(),
             sendId: sendId,
             isOutgoing: currentUserId == from.contact.id.sub,
-            reactions: (try? reactions.map { try $0.toDomain() }) ?? []
+            reactions: (try? reactions.map { try $0.toDomain() }) ?? [],
+            reply: replyTo?.toDomain()
         )
+    }
+}
+
+
+internal struct MessageReplyDto: Decodable {
+    let id: String
+    let sender: ParticipantDto
+    let type: String
+    let body: String?
+    let createdAt: Int64
+    let attachmentMime: String?
+    let attachmentName: String?
+    let attachmentAddress: String?
+    let isDeleted: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case sender, type, body
+        case id = "message_id"
+        case createdAt = "created_at"
+        case attachmentMime = "attachment_mime"
+        case attachmentName = "attachment_name"
+        case attachmentAddress = "attachment_address"
+        case isDeleted = "is_deleted"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        sender = try container.decode(ParticipantDto.self, forKey: .sender)
+        type = (try? container.decodeIfPresent(String.self, forKey: .type)) ?? ""
+        body = try? container.decodeIfPresent(String.self, forKey: .body)
+        createdAt = try decodeTimestamp(container, key: .createdAt)
+        attachmentMime = try? container.decodeIfPresent(String.self, forKey: .attachmentMime)
+        attachmentName = try? container.decodeIfPresent(String.self, forKey: .attachmentName)
+        attachmentAddress = try? container.decodeIfPresent(String.self, forKey: .attachmentAddress)
+        isDeleted = (try? container.decodeIfPresent(Bool.self, forKey: .isDeleted)) ?? false
+    }
+}
+
+
+internal extension MessageReplyDto {
+    func toDomain() -> MessageReply {
+        MessageReply(
+            messageId: id,
+            from: sender.toDomain(),
+            createdAt: Date(timeIntervalSince1970: Double(createdAt) / 1000.0),
+            isDeleted: isDeleted,
+            content: contentToDomain()
+        )
+    }
+
+    private func contentToDomain() -> MessageReplyContent {
+        switch type {
+        case "text":
+            return .text(body)
+        case "image":
+            return .image(caption: body, mimeType: attachmentMime)
+        case "document":
+            return .document(name: attachmentName, mimeType: attachmentMime, caption: body)
+        case "location":
+            return .location(name: attachmentName, address: attachmentAddress)
+        case "contact":
+            return .contact(displayValue: attachmentName)
+        case "system":
+            return .system(body ?? "")
+        case "interactive":
+            return .interactive(body ?? "")
+        default:
+            return .unsupported(type: type, text: body)
+        }
     }
 }
 
@@ -285,12 +364,12 @@ internal struct ReactedMetadataDto: Decodable {
         callbackData = try container.decode(String.self, forKey: .callbackData)
         reactedBy = try container.decode(ParticipantDto.self, forKey: .reactedBy)
 
-        reactedAt = try Self.decodeTimestamp(
+        reactedAt = try decodeTimestamp(
             container,
             key: .reactedAt
         )
     }
-    
+
     func toDomain() -> ChatKeyboardReaction {
         let reactedAt = Date(timeIntervalSince1970: Double(reactedAt) / 1000.0)
         return ChatKeyboardReaction(
@@ -298,27 +377,6 @@ internal struct ReactedMetadataDto: Decodable {
             callbackData: callbackData,
             reactedAt: reactedAt,
             reactedBy: reactedBy.toDomain()
-        )
-    }
-    
-    private static func decodeTimestamp(
-        _ container: KeyedDecodingContainer<CodingKeys>,
-        key: CodingKeys
-    ) throws -> Int64 {
-
-        if let intValue = try? container.decode(Int64.self, forKey: key) {
-            return intValue
-        }
-
-        if let stringValue = try? container.decode(String.self, forKey: key),
-           let intValue = Int64(stringValue) {
-            return intValue
-        }
-
-        throw DecodingError.dataCorruptedError(
-            forKey: key,
-            in: container,
-            debugDescription: "Invalid timestamp format"
         )
     }
 }

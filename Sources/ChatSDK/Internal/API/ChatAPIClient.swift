@@ -274,6 +274,8 @@ internal class ChatAPIClient: ChatAPI {
             throw ChatError.invalidURL
         }
         
+        logger.debug("Send message body: \(request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? "<nil body>")")
+
         return try await perform(request) {
             try self.parseSendMessageResponse(
                 data: $0,
@@ -443,6 +445,8 @@ internal class ChatAPIClient: ChatAPI {
         else {
             return nil
         }
+        
+        logger.debug("Send message body: \(endpoint.body.flatMap { String(data: $0, encoding: .utf8) } ?? "<nil body>")")
 
         var request = URLRequest(url: endpoint.url)
         request.httpMethod = "POST"
@@ -474,7 +478,8 @@ internal class ChatAPIClient: ChatAPI {
                 let dto = SendTextMessageRequestDto(
                     target: target,
                     text: content,
-                    sendId: options.sendId
+                    sendId: options.sendId,
+                    replyToMessageId: options.replyToMessageId
                 )
 
                 return RequestComponents(
@@ -491,7 +496,8 @@ internal class ChatAPIClient: ChatAPI {
                     target: target,
                     text: nil,
                     attachments: attachments,
-                    sendId: options.sendId
+                    sendId: options.sendId,
+                    replyToMessageId: options.replyToMessageId
                 )
 
                 return RequestComponents(
@@ -509,7 +515,8 @@ internal class ChatAPIClient: ChatAPI {
                     name: content.name,
                     phoneNumber: content.phone,
                     email: content.email,
-                    sendId: options.sendId
+                    sendId: options.sendId,
+                    replyToMessageId: options.replyToMessageId
                 )
 
                 return RequestComponents(
@@ -528,7 +535,8 @@ internal class ChatAPIClient: ChatAPI {
                     address: content.address,
                     latitude: content.latitude,
                     longitude: content.longitude,
-                    sendId: options.sendId
+                    sendId: options.sendId,
+                    replyToMessageId: options.replyToMessageId
                 )
 
                 return RequestComponents(
@@ -545,7 +553,8 @@ internal class ChatAPIClient: ChatAPI {
                     target: target,
                     text: content.text,
                     attachments: content.attachments,
-                    sendId: options.sendId
+                    sendId: options.sendId,
+                    replyToMessageId: options.replyToMessageId
                 )
 
                 return RequestComponents(
@@ -1182,3 +1191,4 @@ internal extension DialogType {
         }
     }
 }
+
