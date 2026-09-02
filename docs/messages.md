@@ -166,8 +166,99 @@ public struct Message: Hashable, Codable {
 
     /// Indicates whether message is outgoing
     public let isOutgoing: Bool
+
+    /// Current set of reactions on this message
+    public var reactions: [MessageReaction]
+
+    /// Full quoted message this message replies to, when returned by the server
+    public let reply: MessageReply?
 }
 ```
+
+See [Reactions](reactions.md) for details on `reactions`.
+
+
+## Replying to a Message
+
+### Sending a Reply
+
+Pass the identifier of the message being replied to via `MessageOptions.replyToMessageId`:
+
+```swift
+let options = MessageOptions(
+    content: .text("Sounds good!"),
+    replyToMessageId: originalMessage.id
+)
+
+try await chatClient.sendMessage(to: target, options: options)
+```
+
+### Receiving a Reply (`reply_to`)
+
+When a message is a reply, the server includes a summary of the quoted message on `Message.reply`:
+
+```swift
+public struct MessageReply: Hashable, Codable {
+
+    /// Identifier of the quoted message.
+    public let messageId: String
+
+    /// Sender of the quoted message.
+    public let from: Participant
+
+    /// Creation timestamp of the quoted message.
+    public let createdAt: Date
+
+    /// Whether the quoted message was deleted.
+    ///
+    /// `content` still reflects the original message type, but attachment
+    /// details (mime type, file name, address, etc.) are no longer available.
+    public let isDeleted: Bool
+
+    /// Content of the quoted message.
+    public let content: MessageReplyContent
+}
+```
+
+`MessageReplyContent` is a lightweight summary of the quoted message — not the full `MessageContent` — since the server only echoes back a preview of it:
+
+```swift
+public enum MessageReplyContent: Hashable, Codable {
+    case text(String?)
+    case image(caption: String?, mimeType: String?)
+    case document(name: String?, mimeType: String?, caption: String?)
+    case location(name: String?, address: String?)
+    case contact(displayValue: String?)
+    case system(String)
+    case interactive(String)
+
+    /// Forward-compat fallback for reply types the SDK doesn't model yet.
+    case unsupported(type: String, text: String?)
+}
+```
+
+Example:
+
+```swift
+if let reply = message.reply {
+    switch reply.content {
+    case .text(let text):
+        print("Replying to: \(text)")
+
+    case .image(let caption, _):
+        print("Replying to an image: \(caption ?? "")")
+
+    default:
+        break
+    }
+
+    if reply.isDeleted {
+        print("Original message was deleted")
+    }
+}
+```
+
+`message.reply` is `nil` for messages that are not replies.
 
 
 ## Message History
@@ -405,4 +496,4 @@ public struct EditMessageResult: Hashable, Codable {
 
 Only the message's author is allowed to edit it — the server enforces this and rejects the request otherwise, the same way it does for deletion.
 
-A `ChatEvent.message(.edited(dialogId:, message:))` event is dispatched to every participant of the dialog once the edit is applied, and the dialog's cached `lastMessage` is updated automatically (in place, preserving its existing reactions) if the edited message was the last one. See [Events](events.md) for details.
+A `ChatEvent.message(.edited(dialogId:, message:))` event is dispatched to every participant of the dialog once the edit is applied, and the dialog's cached `lastMessage` is updated automatically (in place, preserving its existing reactions and reply) if the edited message was the last one. See [Events](events.md) for details.

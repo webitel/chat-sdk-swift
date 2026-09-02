@@ -78,7 +78,7 @@ enum MessageEvent {
 }
 ```
 
-`.edited` is dispatched whenever a message is edited — since only the message's author may edit it, `message.from` and `message.isOutgoing` reflect the editor. The dialog's cached `lastMessage` is updated automatically (in place, preserving its existing reactions) if the edited message was the last one.
+`.edited` is dispatched whenever a message is edited — since only the message's author may edit it, `message.from` and `message.isOutgoing` reflect the editor. The dialog's cached `lastMessage` is updated automatically (in place, preserving its existing reactions and reply) if the edited message was the last one.
 
 `.deleted` is dispatched whenever a message is deleted — including deletions made by another participant — carrying who deleted it and when:
 ```swift
