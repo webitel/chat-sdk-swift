@@ -172,6 +172,9 @@ public struct Message: Hashable, Codable {
 
     /// Full quoted message this message replies to, when returned by the server
     public let reply: MessageReply?
+
+    /// Original source if this message was forwarded, nil otherwise
+    public let forwardOrigin: ForwardOrigin?
 }
 ```
 
@@ -259,6 +262,64 @@ if let reply = message.reply {
 ```
 
 `message.reply` is `nil` for messages that are not replies.
+
+
+## Forwarded Messages
+
+When a message was forwarded, the server includes its origin on `Message.forwardOrigin` (`forward_origin`):
+
+```swift
+public struct ForwardOrigin: Hashable, Codable {
+
+    /// When the original message was sent, before it was forwarded.
+    public let originalSentAt: Date
+
+    /// Specific kind of origin and the data that comes with it.
+    public let kind: ForwardOriginKind
+}
+```
+
+```swift
+public enum ForwardOriginKind: Hashable, Codable {
+
+    /// Forwarded from another chat within Webitel.
+    case internalUser(senderId: String, senderName: String?, sourceMessageId: String)
+
+    /// Forwarded from an external messenger, sender named.
+    case externalUser(senderName: String)
+
+    /// Forwarded from an external messenger; the sender chose to hide their identity.
+    case externalHiddenUser
+
+    /// Forwarded from an external group or channel rather than a person.
+    case externalChat(name: String?)
+
+    /// Origin kind not recognized by this SDK version.
+    case unsupported(rawKind: String, senderName: String?)
+}
+```
+
+Example:
+
+```swift
+if let forwardOrigin = message.forwardOrigin {
+    switch forwardOrigin.kind {
+    case .internalUser(_, let senderName, _):
+        print("Forwarded from \(senderName ?? "someone") in Webitel")
+
+    case .externalUser(let senderName):
+        print("Forwarded from \(senderName)")
+
+    case .externalHiddenUser:
+        print("Forwarded from a hidden sender")
+
+    default:
+        break
+    }
+}
+```
+
+`message.forwardOrigin` is `nil` for messages that were not forwarded. Use `forwardOrigin.senderDisplayName` as a shortcut to the sender's name, when known.
 
 
 ## Message History
@@ -430,6 +491,77 @@ public enum SkippedMessageReason: String, Hashable, Codable, CaseIterable {
 `ids` are not restricted to the dialog `deleteMessages` was called on — the underlying endpoint has no notion of a dialog, so any accessible message id can be passed regardless of which `Dialog` instance you call this on, or whether you call it via `chatClient` instead. This mirrors `setReaction`/`removeReaction`, which are available on both `Dialog` and `ChatClient` the same way. Scoping and authorization are enforced server-side; unauthorized or non-existent ids are reported back via `skipped`.
 
 A realtime `ChatEvent.message(.deleted(dialogId:deletion:))` is dispatched when a message is deleted — including deletions made by another participant — and the dialog's cached `lastMessage` is cleared automatically if it was the deleted message. See [Events](events.md) for details.
+
+
+## Forwarding Messages
+
+Messages are forwarded in batch via a dialog instance or via the client:
+- via a dialog instance: `dialog.forwardMessages(ids:)` — forwards into that dialog
+- via the client: `chatClient.forwardMessages(ids:to:)` — forwards to an explicit destination (dialog or contact)
+
+```swift
+/// Forwards messages to another dialog or contact using a completion handler.
+func forwardMessages(
+    ids: [String],
+    to target: MessageTarget,
+    completion: @escaping (Result<ForwardMessagesResult, ChatError>) -> Void
+)
+
+/// Forwards messages to another dialog or contact using async/await.
+func forwardMessages(
+    ids: [String],
+    to target: MessageTarget
+) async throws -> ForwardMessagesResult
+```
+
+```swift
+let target: MessageTarget = .dialog(id: "otherDialogId")
+
+// Forward messages (completion-based)
+chatClient.forwardMessages(ids: [messageId], to: target) { result in
+    switch result {
+
+        case .success(let forwardResult):
+            print("Forwarded: \(forwardResult.ids)")
+            print("Skipped: \(forwardResult.skipped.map { "\($0.id) (\($0.reason))" })")
+
+        case .failure(let error):
+            print("Failed to forward messages: \(error)")
+    }
+}
+
+// Or using async/await
+do {
+
+    let result = try await dialog.forwardMessages(ids: [messageId])
+    print("Forwarded into thread \(result.threadId): \(result.ids)")
+
+} catch {
+
+    print("Failed to forward messages: \(error)")
+}
+```
+
+### Result
+
+```swift
+/// Outcome of a message forward request.
+public struct ForwardMessagesResult: Hashable, Codable {
+
+    /// Identifiers of forwarded messages.
+    public let ids: [String]
+
+    /// Messages that were not forwarded, with the reason for each (e.g. not found or not permitted).
+    public let skipped: [SkippedMessage]
+
+    /// Identifier of the destination dialog the messages were forwarded into.
+    public let threadId: String
+}
+```
+
+`to` is filled the same way as for `sendMessage` — `.dialog(id:)` targets an existing dialog by id, `.contact(contactId:)` targets a contact directly (a dialog may be created automatically). `ForwardMessagesResult.threadId` reports the destination dialog the messages ended up in, which is especially useful when forwarding to a contact and a dialog was created automatically as a result.
+
+`skipped` reuses the same `SkippedMessage`/`SkippedMessageReason` model as `deleteMessages`.
 
 
 ## Editing a Message
