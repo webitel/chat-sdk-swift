@@ -17,6 +17,7 @@ internal struct MessageEditedEventDto: Decodable {
     let editedAt: Int64
     let reactions: [MessageReactionDto]
     let replyTo: MessageReplyDto?
+    let forwardOrigin: ForwardOriginDto?
 
     private enum CodingKeys: String, CodingKey {
         case messageId = "id"
@@ -27,6 +28,7 @@ internal struct MessageEditedEventDto: Decodable {
         case editedAt = "edited_at"
         case reactions
         case replyTo = "reply_to"
+        case forwardOrigin = "forward_origin"
     }
 
     init(from decoder: Decoder) throws {
@@ -46,6 +48,11 @@ internal struct MessageEditedEventDto: Decodable {
         replyTo = try? container.decodeIfPresent(
             MessageReplyDto.self,
             forKey: .replyTo
+        )
+
+        forwardOrigin = try? container.decodeIfPresent(
+            ForwardOriginDto.self,
+            forKey: .forwardOrigin
         )
     }
 
@@ -86,7 +93,8 @@ internal extension MessageEditedEventDto {
             sendId: nil,
             isOutgoing: currentUserId == from.contact.id.sub,
             reactions: (try? reactions.map { try $0.toDomain() }) ?? [],
-            reply: replyTo?.toDomain()
+            reply: replyTo?.toDomain(),
+            forwardOrigin: forwardOrigin?.toDomain()
         )
     }
 }

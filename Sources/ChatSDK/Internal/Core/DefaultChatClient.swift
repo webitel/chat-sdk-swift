@@ -467,6 +467,40 @@ internal class DefaultChatClient: ChatClient {
     }
 
 
+    func forwardMessages(
+        ids: [String],
+        to target: MessageTarget,
+        sendId: String,
+        completion: @escaping (Result<ForwardMessagesResult, ChatError>) -> Void
+    ) {
+        Task {
+            do {
+                let result = try await self.forwardMessages(ids: ids, to: target, sendId: sendId)
+
+                completion(.success(result))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+
+
+    func forwardMessages(
+        ids: [String],
+        to target: MessageTarget,
+        sendId: String
+    ) async throws -> ForwardMessagesResult {
+        try await performWithAuthRetry {
+
+            let dto = try await self.apiProvider.forwardMessages(ids: ids, to: target, sendId: sendId)
+
+            return dto.toDomain()
+        }
+    }
+
+
     func editMessage(
         messageId: String,
         text: String,

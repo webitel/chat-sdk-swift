@@ -56,6 +56,12 @@ internal protocol ChatAPI: AnyObject {
         ids: [String]
     ) async throws -> DeleteMessagesResponseDto
 
+    func forwardMessages(
+        ids: [String],
+        to target: MessageTarget,
+        sendId: String
+    ) async throws -> ForwardMessagesResponseDto
+
     func editMessage(
         messageId: String,
         text: String

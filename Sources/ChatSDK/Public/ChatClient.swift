@@ -264,6 +264,36 @@ public protocol ChatClient {
     ) async throws -> DeleteMessagesResult
 
 
+    /// Forwards messages to another dialog or contact using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - ids: Identifiers of the messages to forward.
+    ///   - target: Destination of the forwarded messages (dialog or contact).
+    ///   - sendId: Client-generated identifier used to match forwarded messages.
+    ///   - completion: Completion handler returning the forward result or error.
+    func forwardMessages(
+        ids: [String],
+        to target: MessageTarget,
+        sendId: String,
+        completion: @escaping (Result<ForwardMessagesResult, ChatError>) -> Void
+    )
+
+
+    /// Forwards messages to another dialog or contact using async/await.
+    ///
+    /// - Parameters:
+    ///   - ids: Identifiers of the messages to forward.
+    ///   - target: Destination of the forwarded messages (dialog or contact).
+    ///   - sendId: Client-generated identifier used to match forwarded messages.
+    /// - Returns: The forward result, including the resulting messages and destination thread.
+    /// - Throws: `ChatError` if the operation fails.
+    func forwardMessages(
+        ids: [String],
+        to target: MessageTarget,
+        sendId: String
+    ) async throws -> ForwardMessagesResult
+
+
     /// Edits the text of a message using a completion handler.
     ///
     /// - Parameters:
@@ -413,5 +443,35 @@ public extension ChatClient {
         messageId: String
     ) async throws -> ReactionResult {
         try await setReaction(messageId: messageId, emoji: "", sendId: nil)
+    }
+
+
+    /// Forwards messages to another dialog or contact using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - ids: Identifiers of the messages to forward.
+    ///   - target: Destination of the forwarded messages (dialog or contact).
+    ///   - completion: Completion handler returning the forward result or error.
+    func forwardMessages(
+        ids: [String],
+        to target: MessageTarget,
+        completion: @escaping (Result<ForwardMessagesResult, ChatError>) -> Void
+    ) {
+        forwardMessages(ids: ids, to: target, sendId: UUID().uuidString, completion: completion)
+    }
+
+
+    /// Forwards messages to another dialog or contact using async/await.
+    ///
+    /// - Parameters:
+    ///   - ids: Identifiers of the messages to forward.
+    ///   - target: Destination of the forwarded messages (dialog or contact).
+    /// - Returns: The forward result, including the resulting messages and destination thread.
+    /// - Throws: `ChatError` if the operation fails.
+    func forwardMessages(
+        ids: [String],
+        to target: MessageTarget
+    ) async throws -> ForwardMessagesResult {
+        try await forwardMessages(ids: ids, to: target, sendId: UUID().uuidString)
     }
 }

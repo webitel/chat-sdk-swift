@@ -153,6 +153,32 @@ public protocol Dialog: Hashable {
     ) async throws -> DeleteMessagesResult
 
 
+    /// Forwards messages into this dialog using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - ids: Identifiers of the messages to forward.
+    ///   - sendId: Client-generated identifier used to match forwarded messages.
+    ///   - completion: Completion handler returning the forward result or error.
+    func forwardMessages(
+        ids: [String],
+        sendId: String,
+        completion: @escaping (Result<ForwardMessagesResult, ChatError>) -> Void
+    )
+
+
+    /// Forwards messages into this dialog using async/await.
+    ///
+    /// - Parameters:
+    ///   - ids: Identifiers of the messages to forward.
+    ///   - sendId: Client-generated identifier used to match forwarded messages.
+    /// - Returns: The forward result, including the resulting messages and destination thread.
+    /// - Throws: `ChatError` if the operation fails.
+    func forwardMessages(
+        ids: [String],
+        sendId: String
+    ) async throws -> ForwardMessagesResult
+
+
     /// Edits the text of a message using a completion handler.
     ///
     /// - Parameters:
@@ -242,5 +268,30 @@ public extension Dialog {
         messageId: String
     ) async throws -> ReactionResult {
         try await setReaction(messageId: messageId, emoji: "", sendId: nil)
+    }
+
+
+    /// Forwards messages into this dialog using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - ids: Identifiers of the messages to forward.
+    ///   - completion: Completion handler returning the forward result or error.
+    func forwardMessages(
+        ids: [String],
+        completion: @escaping (Result<ForwardMessagesResult, ChatError>) -> Void
+    ) {
+        forwardMessages(ids: ids, sendId: UUID().uuidString, completion: completion)
+    }
+
+
+    /// Forwards messages into this dialog using async/await.
+    ///
+    /// - Parameter ids: Identifiers of the messages to forward.
+    /// - Returns: The forward result, including the resulting messages and destination thread.
+    /// - Throws: `ChatError` if the operation fails.
+    func forwardMessages(
+        ids: [String]
+    ) async throws -> ForwardMessagesResult {
+        try await forwardMessages(ids: ids, sendId: UUID().uuidString)
     }
 }

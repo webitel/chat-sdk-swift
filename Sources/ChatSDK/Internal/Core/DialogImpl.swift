@@ -102,6 +102,23 @@ internal final class DialogImpl: Dialog {
     }
 
 
+    func forwardMessages(
+        ids: [String],
+        sendId: String,
+        completion: @escaping (Result<ForwardMessagesResult, ChatError>) -> Void
+    ) {
+        client.forwardMessages(ids: ids, to: .dialog(id: id), sendId: sendId, completion: completion)
+    }
+
+
+    func forwardMessages(
+        ids: [String],
+        sendId: String
+    ) async throws -> ForwardMessagesResult {
+        try await client.forwardMessages(ids: ids, to: .dialog(id: id), sendId: sendId)
+    }
+
+
     func editMessage(
         messageId: String,
         text: String,

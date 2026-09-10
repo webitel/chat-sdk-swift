@@ -40,6 +40,9 @@ public struct Message: Hashable, Codable {
     /// Full quoted message this message replies to, when returned by the server.
     public let reply: MessageReply?
 
+    /// Original source if this message was forwarded, nil otherwise.
+    public let forwardOrigin: ForwardOrigin?
+
     public init(
         id: String,
         dialogId: String,
@@ -50,7 +53,8 @@ public struct Message: Hashable, Codable {
         sendId: String? = nil,
         isOutgoing: Bool,
         reactions: [MessageReaction],
-        reply: MessageReply? = nil
+        reply: MessageReply? = nil,
+        forwardOrigin: ForwardOrigin? = nil
     ) {
         self.id = id
         self.dialogId = dialogId
@@ -62,6 +66,7 @@ public struct Message: Hashable, Codable {
         self.isOutgoing = isOutgoing
         self.reactions = reactions
         self.reply = reply
+        self.forwardOrigin = forwardOrigin
     }
 }
 

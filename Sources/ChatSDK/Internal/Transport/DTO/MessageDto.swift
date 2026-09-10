@@ -41,6 +41,7 @@ internal struct MessageDto: Decodable {
     let content: MessageContentDto
     let reactions: [MessageReactionDto]
     let replyTo: MessageReplyDto?
+    let forwardOrigin: ForwardOriginDto?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -55,6 +56,7 @@ internal struct MessageDto: Decodable {
         case location
         case reactions
         case replyTo = "reply_to"
+        case forwardOrigin = "forward_origin"
     }
 
     init(from decoder: Decoder) throws {
@@ -94,6 +96,11 @@ internal struct MessageDto: Decodable {
             forKey: .replyTo
         )
 
+        forwardOrigin = try? container.decodeIfPresent(
+            ForwardOriginDto.self,
+            forKey: .forwardOrigin
+        )
+
         content = try MessageContentDto(from: decoder)
     }
 }
@@ -116,7 +123,8 @@ internal extension MessageDto {
             sendId: sendId,
             isOutgoing: currentUserId == from.contact.id.sub,
             reactions: (try? reactions.map { try $0.toDomain() }) ?? [],
-            reply: replyTo?.toDomain()
+            reply: replyTo?.toDomain(),
+            forwardOrigin: forwardOrigin?.toDomain()
         )
     }
 }
@@ -187,6 +195,61 @@ internal extension MessageReplyDto {
             return .interactive(body ?? "")
         default:
             return .unsupported(type: type, text: body)
+        }
+    }
+}
+
+
+internal struct ForwardOriginDto: Decodable {
+    let kind: String
+    let senderId: String?
+    let senderName: String?
+    let sourceMessageId: String?
+    let originalSentAt: Int64
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case senderId = "sender_id"
+        case senderName = "sender_name"
+        case sourceMessageId = "source_message_id"
+        case originalSentAt = "original_sent_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = (try? container.decodeIfPresent(String.self, forKey: .kind)) ?? ""
+        senderId = try? container.decodeIfPresent(String.self, forKey: .senderId)
+        senderName = try? container.decodeIfPresent(String.self, forKey: .senderName)
+        sourceMessageId = try? container.decodeIfPresent(String.self, forKey: .sourceMessageId)
+        originalSentAt = try decodeTimestamp(container, key: .originalSentAt)
+    }
+}
+
+
+internal extension ForwardOriginDto {
+    func toDomain() -> ForwardOrigin {
+        ForwardOrigin(
+            originalSentAt: Date(timeIntervalSince1970: Double(originalSentAt) / 1000.0),
+            kind: kindToDomain()
+        )
+    }
+
+    private func kindToDomain() -> ForwardOriginKind {
+        switch kind {
+        case "FORWARD_ORIGIN_KIND_INTERNAL":
+            return .internalUser(
+                senderId: senderId ?? "",
+                senderName: senderName,
+                sourceMessageId: sourceMessageId ?? ""
+            )
+        case "FORWARD_ORIGIN_KIND_EXTERNAL_USER":
+            return .externalUser(senderName: senderName ?? "")
+        case "FORWARD_ORIGIN_KIND_EXTERNAL_HIDDEN_USER":
+            return .externalHiddenUser
+        case "FORWARD_ORIGIN_KIND_EXTERNAL_CHAT":
+            return .externalChat(name: senderName)
+        default:
+            return .unsupported(rawKind: kind, senderName: senderName)
         }
     }
 }

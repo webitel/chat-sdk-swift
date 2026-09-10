@@ -21,6 +21,7 @@ internal class ChatAPIClient: ChatAPI {
         static let messages = "/api/v1/messages"
 
         static let deleteMessages = "\(messages)/delete"
+        static let forwardMessages = "\(messages)/forward"
         static let textMessage = "\(messages)/text"
         static let documentMessage = "\(messages)/document"
         static let contactMessage = "\(messages)/contact"
@@ -240,6 +241,29 @@ internal class ChatAPIClient: ChatAPI {
     }
 
 
+    func forwardMessages(
+        ids: [String],
+        to target: MessageTarget,
+        sendId: String
+    ) async throws -> ForwardMessagesResponseDto {
+
+        guard let urlRequest = buildForwardMessagesRequest(
+            ids: ids,
+            target: target,
+            sendId: sendId
+        ) else {
+            throw ChatError.invalidURL
+        }
+
+        return try await perform(urlRequest) {
+            try self.parseForwardMessagesResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+
+
     func editMessage(
         messageId: String,
         text: String
@@ -446,8 +470,6 @@ internal class ChatAPIClient: ChatAPI {
             return nil
         }
         
-        logger.debug("Send message body: \(endpoint.body.flatMap { String(data: $0, encoding: .utf8) } ?? "<nil body>")")
-
         var request = URLRequest(url: endpoint.url)
         request.httpMethod = "POST"
         request.setValue(
@@ -703,6 +725,35 @@ internal class ChatAPIClient: ChatAPI {
     }
 
 
+    private func buildForwardMessagesRequest(
+        ids: [String],
+        target: MessageTarget,
+        sendId: String
+    ) -> URLRequest? {
+
+        guard let url = buildURL(path: APIPath.forwardMessages) else {
+            return nil
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        urlRequest.httpBody = try? jsonEncoder.encode(
+            ForwardMessagesRequestDto(messageIds: ids, target: target, sendId: sendId)
+        )
+
+        return urlRequest
+    }
+
+
     private func buildEditMessageRequest(
         messageId: String,
         text: String
@@ -790,6 +841,30 @@ internal class ChatAPIClient: ChatAPI {
                 error,
                 data: validData,
                 responseName: "delete messages response"
+            )
+            throw error
+        }
+    }
+
+
+    private func parseForwardMessagesResponse(
+        data: Data,
+        response: HTTPURLResponse
+    ) throws -> ForwardMessagesResponseDto {
+
+        let validData =
+            try response.validate(data: data, logger: logger)
+
+        do {
+            return try jsonDecoder.decode(
+                ForwardMessagesResponseDto.self,
+                from: validData
+            )
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "forward messages response"
             )
             throw error
         }
