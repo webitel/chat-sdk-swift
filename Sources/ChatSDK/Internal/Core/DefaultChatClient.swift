@@ -131,7 +131,7 @@ internal class DefaultChatClient: ChatClient {
             let result = try await self.apiProvider.getHistory(dialogId: dialogId, request: request)
 
             return HistorySlice(
-                items: (result.items?.map { $0.toDomain(self.currentUserId) } ?? []).reversed(),
+                items: (result.items?.compactMap { $0.toDomain(self.currentUserId) } ?? []).reversed(),
                 newerCursor: result.newerPaging.map { HistoryCursor(messageId: $0.id, direction: .newer) },
                 olderCursor: result.olderPaging.map { HistoryCursor(messageId: $0.id, direction: .older) }
             )
@@ -374,6 +374,11 @@ internal class DefaultChatClient: ChatClient {
     }
     
     
+    func invalidateAccessToken() {
+        authManager.invalidateAccessToken()
+    }
+    
+    
     func addEventObserver(_ observer: any ChatEventObserver) {
         hub.addGlobalObserver(observer)
     }
@@ -461,9 +466,11 @@ final class TaskCancellable: Cancellable {
 
 extension DefaultChatClient: RealtimeObserver {
     func onMessage(_ message: MessageDto) {
+        guard let messageDomain = message.toDomain(self.authManager.currentContact?.id) else {
+            return
+        }
+
         let dialog = self.dialogFactory.get(message.dialogId)
-        let messageDomain = message.toDomain(self.authManager.currentContact?.id)
-        
         dialog?.applyMessage(messageDomain)
         
         self.hub.dispatch(

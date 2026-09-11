@@ -252,6 +252,15 @@ public protocol ChatClient {
         request: DownloadRequest,
         observer: DownloadObserver
     ) -> Cancellable
+    
+    
+    /// Invalidates the access token currently cached by the SDK.
+    ///
+    /// The SDK will request a new token from the configured
+    /// `tokenProvider` before the next authenticated API request.
+    ///
+    /// This method is applicable when using `.token` authentication.
+    func invalidateAccessToken()
 
     
     /// Adds an observer for chat events (messages, dialogs, typing, etc.).

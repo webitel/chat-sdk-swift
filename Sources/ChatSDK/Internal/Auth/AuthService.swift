@@ -17,5 +17,7 @@ internal protocol AuthService {
     func clearAuth()
 
     func endSession() async throws
+    
+    func invalidateAccessToken()
 }
 
