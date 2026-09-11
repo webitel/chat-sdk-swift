@@ -31,11 +31,13 @@ fileprivate func decodeTimestamp<Key: CodingKey>(
 
 
 internal struct MessageDto: Decodable {
+    private static let logger = SDKLogger.make("chat.dto.message")
+
     let id: String
     let dialogId: String
     let createdAt: Int64
-    let editedAt: Int64?
-    let from: ParticipantDto
+    let editedAt: Int64
+    let from: ParticipantDto?
     let sendId: String?
     let body: String?
     let content: MessageContentDto
@@ -76,10 +78,15 @@ internal struct MessageDto: Decodable {
             key: .editedAt
         )
 
-        from = try container.decode(
-            ParticipantDto.self,
-            forKey: .from
-        )
+        do {
+            from = try container.decode(
+                ParticipantDto.self,
+                forKey: .from
+            )
+        } catch {
+            Self.logger.warning("Sender not found for message \(id): \(error)")
+            from = nil
+        }
 
         sendId = try container.decodeIfPresent(
             String.self,
@@ -107,8 +114,10 @@ internal struct MessageDto: Decodable {
 
 
 internal extension MessageDto {
-    func toDomain(_ currentUserId: String?) -> Message {
-        let from = self.from.toDomain()
+    func toDomain(_ currentUserId: String?) -> Message? {
+        guard let from = self.from?.toDomain() else {
+            return nil
+        }
 
         let createdDate = Date(timeIntervalSince1970: Double(createdAt) / 1000.0)
         let editedDate = editedAt.map { Date(timeIntervalSince1970: Double($0) / 1000.0) }

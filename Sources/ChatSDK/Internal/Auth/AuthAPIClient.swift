@@ -122,6 +122,16 @@ final class AuthAPIClient: AuthService {
     func clearAuth() {
         headerProvider.updateAccessToken(nil)
     }
+    
+    
+    func invalidateAccessToken() {
+        guard case .token = context.authMethod else {
+            return
+        }
+
+        logger.debug("Access token invalidated")
+        headerProvider.updateAccessToken(nil)
+    }
 
     
     func addTokenListener(
