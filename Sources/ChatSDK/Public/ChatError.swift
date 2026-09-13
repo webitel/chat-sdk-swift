@@ -61,11 +61,16 @@ extension ChatError {
              (.sslPinningError, .sslPinningError),
              (.invalidResponse, .invalidResponse),
              (.encodingFailed, .encodingFailed),
+             (.emptyMessage, .emptyMessage),
              (.notImplemented, .notImplemented),
+             (.cancelled, .cancelled),
              (.serviceUnavailable, .serviceUnavailable):
             return true
 
         case let (.internalServerError(lMsg), .internalServerError(rMsg)):
+            return lMsg == rMsg
+
+        case let (.badRequest(lMsg), .badRequest(rMsg)):
             return lMsg == rMsg
 
         case let (.unknown(lCode, lMsg, _), .unknown(rCode, rMsg, _)):
@@ -190,10 +195,15 @@ extension Error {
             return chatError
         }
         
+        if self is CancellationError {
+            return .cancelled
+        }
+
         let nsError = self as NSError
         
         if nsError.domain == NSURLErrorDomain {
             switch nsError.code {
+            case NSURLErrorCancelled: return .cancelled
             case NSURLErrorTimedOut: return .timeout
             case NSURLErrorNotConnectedToInternet: return .serviceUnavailable
             default: break

@@ -9,11 +9,6 @@ import Foundation
 
 
 internal class DefaultChatClient: ChatClient {
-    func upload(request: UploadRequest, observer: any UploadObserver) -> any Cancellable {
-        fileTransferClient.upload(request: request, observer: observer)
-    }
-    
-    
     private let apiProvider: ChatAPI
     private let authManager: AuthService
     private let dialogFactory: DialogFactory
@@ -533,11 +528,50 @@ internal class DefaultChatClient: ChatClient {
 
             return try dto.toDomain()
         }
+    
+    
+    func upload(request: UploadRequest, observer: any UploadObserver) -> any Cancellable {
+        let proxy = DeferredCancellable(onCancelBeforeStart: { observer.onError(.cancelled) })
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                try await self.authManager.ensureAuthValid()
+            } catch {
+                proxy.reportError { observer.onError(error.asChatError) }
+                return
+            }
+
+            proxy.attach { self.fileTransferClient.upload(request: request, observer: observer) }
+        }
+
+        return proxy
     }
 
 
     func download(request: DownloadRequest, observer: any DownloadObserver) -> any Cancellable {
-        fileTransferClient.download(request, observer)
+        let proxy = DeferredCancellable(onCancelBeforeStart: { observer.onError(.cancelled) })
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                try await self.authManager.ensureAuthValid()
+            } catch {
+                proxy.reportError { observer.onError(error.asChatError) }
+                return
+            }
+
+            proxy.attach { self.fileTransferClient.download(request, observer) }
+        }
+
+        return proxy
+    }
+    
+    
+    func invalidateAccessToken() {
+        authManager.invalidateAccessToken()
     }
     
     
@@ -627,6 +661,86 @@ final class TaskCancellable: Cancellable {
 
     func cancel() {
         task.cancel()
+    }
+}
+
+
+/// Returned synchronously by operations that must perform async work
+/// (e.g. `authManager.ensureAuthValid()`) before the real `Cancellable`
+/// exists. Guarantees exactly one terminal notification to the observer
+/// (either `.cancelled` or a reported error), no matter how `cancel()`,
+/// `reportError(_:)` and `attach(_:)` interleave across threads.
+final class DeferredCancellable: Cancellable {
+    private enum State {
+        case pending
+        case attaching
+        case cancelledWhileAttaching
+        case resolved(Cancellable?)
+    }
+
+    private let lock = NSLock()
+    private var state: State = .pending
+    private let onCancelBeforeStart: () -> Void
+
+    init(onCancelBeforeStart: @escaping () -> Void) {
+        self.onCancelBeforeStart = onCancelBeforeStart
+    }
+
+    /// Reports a terminal error via `report`, unless `cancel()` already won
+    /// the race and delivered `.cancelled` to the observer — in that case
+    /// this is a no-op.
+    func reportError(_ report: () -> Void) {
+        lock.lock()
+        guard case .pending = state else { lock.unlock(); return }
+        state = .resolved(nil)
+        lock.unlock()
+        report()
+    }
+
+    /// Creates the real Cancellable via `makeCancellable` — invoked OUTSIDE
+    /// the lock, so it's safe even if it calls back into `observer`
+    /// synchronously (e.g. `HttpFileTransferClient.download` reporting a
+    /// request-building error before returning its `Cancellable`) — and
+    /// stores it. If `cancel()` runs while this is in flight, the resulting
+    /// `Cancellable` is cancelled as soon as it's ready; its own `cancel()`
+    /// is then the sole source of the `.cancelled` notification, so
+    /// `onCancelBeforeStart` is never also invoked for the same request.
+    func attach(_ makeCancellable: () -> Cancellable) {
+        lock.lock()
+        guard case .pending = state else { lock.unlock(); return }
+        state = .attaching
+        lock.unlock()
+
+        let cancellable = makeCancellable()
+
+        lock.lock()
+        switch state {
+        case .cancelledWhileAttaching:
+            state = .resolved(cancellable)
+            lock.unlock()
+            cancellable.cancel()
+        default:
+            state = .resolved(cancellable)
+            lock.unlock()
+        }
+    }
+
+    func cancel() {
+        lock.lock()
+        switch state {
+        case .pending:
+            state = .resolved(nil)
+            lock.unlock()
+            onCancelBeforeStart()
+        case .attaching:
+            state = .cancelledWhileAttaching
+            lock.unlock()
+        case .cancelledWhileAttaching:
+            lock.unlock()
+        case .resolved(let inner):
+            lock.unlock()
+            inner?.cancel()
+        }
     }
 }
 

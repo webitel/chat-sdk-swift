@@ -19,10 +19,16 @@ final class AuthAPIClient: AuthService {
 
     private var listeners: [(String) -> Void] = []
 
+    private let stateLock = NSLock()
     private var refreshTask: Task<Void, Error>?
+    private var _currentContact: ContactDto?
 
-    private(set) var currentContact: ContactDto?
-    
+    var currentContact: ContactDto? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return _currentContact
+    }
+
     private let logger = SDKLogger.make("chat.auth")
     
     private lazy var session: URLSession = {
@@ -80,9 +86,29 @@ final class AuthAPIClient: AuthService {
     
     func refresh() async throws {
         logger.debug("refresh started")
-        if let task = refreshTask {
+
+        let (task, isNew) = joinOrStartRefreshTask()
+
+        if !isNew {
             logger.debug("refresh auth already in progress")
-            return try await task.value
+        }
+
+        defer {
+            if isNew {
+                clearRefreshTask()
+            }
+        }
+
+        return try await task.value
+    }
+
+
+    private func joinOrStartRefreshTask() -> (Task<Void, Error>, Bool) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
+        if let existing = refreshTask {
+            return (existing, false)
         }
 
         let task = Task {
@@ -90,12 +116,14 @@ final class AuthAPIClient: AuthService {
         }
 
         refreshTask = task
+        return (task, true)
+    }
 
-        defer {
-            refreshTask = nil
-        }
 
-        return try await task.value
+    private func clearRefreshTask() {
+        stateLock.lock()
+        refreshTask = nil
+        stateLock.unlock()
     }
 
     
@@ -138,6 +166,13 @@ final class AuthAPIClient: AuthService {
         _ listener: @escaping (String) -> Void
     ) {
         listeners.append(listener)
+    }
+
+
+    private func setCurrentContact(_ contact: ContactDto?) {
+        stateLock.lock()
+        _currentContact = contact
+        stateLock.unlock()
     }
 
     
@@ -230,12 +265,14 @@ final class AuthAPIClient: AuthService {
             throw ChatError.invalidResponse
         }
 
-        currentContact = dto.contact ?? ContactDto(
-            iss: contact.sub,
-            name: contact.iss,
-            id: contact.name,
-            source: contact.iss,
-            isBot: false
+        setCurrentContact(
+            dto.contact ?? ContactDto(
+                iss: contact.sub,
+                name: contact.iss,
+                id: contact.name,
+                source: contact.iss,
+                isBot: false
+            )
         )
         logger.debug("contact: \(currentContact)")
         
@@ -261,8 +298,8 @@ final class AuthAPIClient: AuthService {
             logger.error("contact missing")
             throw ChatError.invalidResponse
         }
-        
-        currentContact = contact
+
+        setCurrentContact(contact)
     }
     
     
@@ -273,7 +310,7 @@ final class AuthAPIClient: AuthService {
         try response.validate(data: data, logger: logger)
         
         headerProvider.updateAccessToken(nil)
-        currentContact = nil
+        setCurrentContact(nil)
     }
 
 
