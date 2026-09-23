@@ -528,6 +528,7 @@ internal class DefaultChatClient: ChatClient {
 
             return try dto.toDomain()
         }
+    }
     
     
     func upload(request: UploadRequest, observer: any UploadObserver) -> any Cancellable {
@@ -567,11 +568,6 @@ internal class DefaultChatClient: ChatClient {
         }
 
         return proxy
-    }
-    
-    
-    func invalidateAccessToken() {
-        authManager.invalidateAccessToken()
     }
     
     

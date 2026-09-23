@@ -36,7 +36,7 @@ internal struct MessageDto: Decodable {
     let id: String
     let dialogId: String
     let createdAt: Int64
-    let editedAt: Int64
+    let editedAt: Int64?
     let from: ParticipantDto?
     let sendId: String?
     let body: String?
