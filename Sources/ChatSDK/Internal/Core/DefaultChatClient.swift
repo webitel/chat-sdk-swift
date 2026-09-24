@@ -132,7 +132,43 @@ internal class DefaultChatClient: ChatClient {
             )
         }
     }
-    
+
+
+    func searchMessages(
+        request: MessageSearchRequest,
+        dialogId: String?,
+        completion: @escaping (Result<MessageSearchSlice, ChatError>) -> Void
+    ) {
+        Task {
+            do {
+                let result = try await searchMessages(request, dialogId: dialogId)
+
+                completion(.success(result))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+
+
+    func searchMessages(
+        _ request: MessageSearchRequest,
+        dialogId: String?
+    ) async throws -> MessageSearchSlice {
+        try await performWithAuthRetry {
+
+            let result = try await self.apiProvider.searchMessages(dialogId: dialogId, request: request)
+
+            return MessageSearchSlice(
+                items: (result.items?.compactMap { $0.toDomain(self.currentUserId) } ?? []).reversed(),
+                newerCursor: result.newerPaging.map { MessageSearchCursor(messageId: $0.id, direction: .newer) },
+                olderCursor: result.olderPaging.map { MessageSearchCursor(messageId: $0.id, direction: .older) }
+            )
+        }
+    }
+
     
     func getDialogs(
         request: DialogRequest,

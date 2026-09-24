@@ -48,8 +48,18 @@ internal final class DialogImpl: Dialog {
     func getHistory(request: HistoryRequest) async throws -> HistorySlice {
         try await client.getHistory(dialogId: id, request: request)
     }
-    
-    
+
+
+    func searchMessages(request: MessageSearchRequest, completion: @escaping (Result<MessageSearchSlice, ChatError>) -> Void) {
+        client.searchMessages(request: request, dialogId: id, completion: completion)
+    }
+
+
+    func searchMessages(_ request: MessageSearchRequest) async throws -> MessageSearchSlice {
+        try await client.searchMessages(request, dialogId: id)
+    }
+
+
     func sendAction(_ action: MessageAction, completion: @escaping (Result<Void, ChatError>) -> Void) {
         client.sendAction(action, completion: completion)
     }

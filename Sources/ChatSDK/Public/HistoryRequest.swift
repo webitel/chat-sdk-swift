@@ -54,4 +54,7 @@ public enum MoveDirection: String, Codable {
 
     /// Load messages newer than the cursor.
     case newer
+    
+    /// Load messages around the cursor.
+//    case around
 }

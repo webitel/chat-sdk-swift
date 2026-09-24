@@ -364,6 +364,32 @@ public protocol ChatClient {
     ) -> Cancellable
     
     
+    /// Searches messages, optionally scoped to a specific dialog, using async/await.
+    ///
+    /// - Parameters:
+    ///   - request: Search request containing the query and search parameters.
+    ///   - dialogId: Identifier of the dialog to search within. When `nil`, searches across all dialogs of the current user.
+    /// - Returns: A slice containing the matching messages and pagination information.
+    /// - Throws: `ChatError` if the operation fails.
+    func searchMessages(
+        _ request: MessageSearchRequest,
+        dialogId: String?
+    ) async throws -> MessageSearchSlice
+
+
+    /// Searches messages, optionally scoped to a specific dialog, using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - request: Search request containing the query and search parameters.
+    ///   - dialogId: Identifier of the dialog to search within. When `nil`, searches across all dialogs of the current user.
+    ///   - completion: Completion handler returning the matching messages or error.
+    func searchMessages(
+        request: MessageSearchRequest,
+        dialogId: String?,
+        completion: @escaping (Result<MessageSearchSlice, ChatError>) -> Void
+    )
+
+
     /// Invalidates the access token currently cached by the SDK.
     ///
     /// The SDK will request a new token from the configured
@@ -482,5 +508,30 @@ public extension ChatClient {
         to target: MessageTarget
     ) async throws -> ForwardMessagesResult {
         try await forwardMessages(ids: ids, to: target, sendId: UUID().uuidString)
+    }
+
+
+    /// Searches messages across all dialogs of the current user using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - request: Search request containing the query and search parameters.
+    ///   - completion: Completion handler returning the matching messages or error.
+    func searchMessages(
+        request: MessageSearchRequest,
+        completion: @escaping (Result<MessageSearchSlice, ChatError>) -> Void
+    ) {
+        searchMessages(request: request, dialogId: nil, completion: completion)
+    }
+
+
+    /// Searches messages across all dialogs of the current user using async/await.
+    ///
+    /// - Parameter request: Search request containing the query and search parameters.
+    /// - Returns: A slice containing the matching messages and pagination information.
+    /// - Throws: `ChatError` if the operation fails.
+    func searchMessages(
+        _ request: MessageSearchRequest
+    ) async throws -> MessageSearchSlice {
+        try await searchMessages(request, dialogId: nil)
     }
 }

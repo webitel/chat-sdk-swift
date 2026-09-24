@@ -28,6 +28,11 @@ internal protocol ChatAPI: AnyObject {
         request: HistoryRequest
     ) async throws -> HistoryResponseDto
 
+    func searchMessages(
+        dialogId: String?,
+        request: MessageSearchRequest
+    ) async throws -> MessageSearchResponseDto
+
     func registerDevice(
         pushToken: String,
         pushTokenType: PushTokenType

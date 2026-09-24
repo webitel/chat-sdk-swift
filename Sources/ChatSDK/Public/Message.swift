@@ -74,6 +74,7 @@ public struct Message: Hashable, Codable {
 public extension Message {
     /// Indicates whether the message was edited after creation.
     var isEdited: Bool {
-        editedAt != nil
+        guard let editedAt else { return false }
+        return editedAt > createdAt
     }
 }

@@ -20,6 +20,7 @@ internal class ChatAPIClient: ChatAPI {
         static let devices = "/api/v1/auth/devices"
         static let messages = "/api/v1/messages"
 
+        static let searchMessages = "\(messages)/search"
         static let deleteMessages = "\(messages)/delete"
         static let forwardMessages = "\(messages)/forward"
         static let textMessage = "\(messages)/text"
@@ -140,8 +141,30 @@ internal class ChatAPIClient: ChatAPI {
             )
         }
     }
-    
-    
+
+
+    func searchMessages(
+        dialogId: String?,
+        request: MessageSearchRequest
+    ) async throws -> MessageSearchResponseDto {
+
+        guard let httpRequest = buildSearchMessagesRequest(
+            dialogId: dialogId,
+            request: request
+        ) else {
+            throw ChatError.invalidURL
+        }
+
+        return try await perform(httpRequest) {
+            try self.parseSearchMessagesResponse(
+                data: $0,
+                response: $1,
+                request: request
+            )
+        }
+    }
+
+
     func registerDevice(
         pushToken: String,
         pushTokenType: PushTokenType
@@ -1122,6 +1145,103 @@ internal class ChatAPIClient: ChatAPI {
     }
     
     
+    private func parseSearchMessagesResponse(
+        data: Data,
+        response: HTTPURLResponse,
+        request: MessageSearchRequest
+    ) throws -> MessageSearchResponseDto {
+
+        let validData =
+            try response.validate(data: data, logger: logger)
+
+        do {
+            return try jsonDecoder.decode(
+                MessageSearchResponseDto.self,
+                from: validData
+            )
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "search messages response"
+            )
+            throw error
+        }
+    }
+
+
+    private func buildSearchMessagesRequest(
+        dialogId: String?,
+        request: MessageSearchRequest
+    ) -> URLRequest? {
+
+        guard let url = buildSearchMessagesURL(
+            dialogId: dialogId,
+            request: request
+        ) else {
+
+            return nil
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        return urlRequest
+    }
+
+
+    private func buildSearchMessagesURL(
+        dialogId: String?,
+        request: MessageSearchRequest
+    ) -> URL? {
+
+        var components = URLComponents(
+            url: context.baseURL
+                .appendingPathComponent(APIPath.searchMessages),
+            resolvingAgainstBaseURL: false
+        )
+
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "q", value: request.query),
+            URLQueryItem(name: "size", value: String(request.limit))
+        ]
+
+        if let dialogId {
+            queryItems.append(URLQueryItem(name: "thread_id", value: dialogId))
+        }
+
+        queryItems.append(contentsOf: makeArrayItems(
+            name: "sender_ids",
+            values: Array(request.senderIds)
+        ))
+
+        queryItems.append(contentsOf: makeArrayItems(
+            name: "types",
+            values: request.contentTypes.map { String($0.rawValue) }
+        ))
+
+        if let cursor = request.cursor {
+            queryItems.append(URLQueryItem(name: "cursor.id", value: cursor.messageId))
+            queryItems.append(
+                URLQueryItem(
+                    name: "cursor.before",
+                    value: cursor.direction == .newer
+                    ? "true"
+                    : "false"
+                )
+            )
+        }
+
+        components?.queryItems = queryItems
+
+        return components?.url
+    }
+
+
     private func buildContactsURL(
         _ request: ContactRequest
     ) -> URL? {

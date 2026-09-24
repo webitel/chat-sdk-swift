@@ -203,6 +203,27 @@ public protocol Dialog: Hashable {
         messageId: String,
         text: String
     ) async throws -> EditMessageResult
+    
+    
+    /// Searches messages within this dialog using async/await.
+    ///
+    /// - Parameter request: Search request containing the query and search parameters.
+    /// - Returns: A slice containing the matching messages and pagination information.
+    /// - Throws: `ChatError` if the operation fails.
+    func searchMessages(
+        _ request: MessageSearchRequest
+    ) async throws -> MessageSearchSlice
+
+
+    /// Searches messages within this dialog using a completion handler.
+    ///
+    /// - Parameters:
+    ///   - request: Search request containing the query and search parameters.
+    ///   - completion: Completion handler returning the matching messages or error.
+    func searchMessages(
+        request: MessageSearchRequest,
+        completion: @escaping (Result<MessageSearchSlice, ChatError>) -> Void
+    )
 
 
     /// Adds a dialog-scoped event observer.
