@@ -629,3 +629,65 @@ public struct EditMessageResult: Hashable, Codable {
 Only the message's author is allowed to edit it — the server enforces this and rejects the request otherwise, the same way it does for deletion.
 
 A `ChatEvent.message(.edited(dialogId:, message:))` event is dispatched to every participant of the dialog once the edit is applied, and the dialog's cached `lastMessage` is updated automatically (in place, preserving its existing reactions and reply) if the edited message was the last one. See [Events](events.md) for details.
+
+## Marking Messages as Read
+
+Messages are marked as read via a dialog instance, either by sequence or by message id:
+- `dialog.markAsRead(sequence:)` — using `Message.sequence`
+- `dialog.markAsRead(messageId:)` — using `Message.id`
+
+All messages in the dialog up to and including the given message are considered read. Both variants behave the same on the server; `Message.sequence` is optional, so fall back to `messageId` when it is `nil`.
+
+```swift
+/// Marks messages in this dialog as read using a completion handler.
+func markAsRead(
+    sequence: Int64,
+    completion: @escaping (Result<Void, ChatError>) -> Void
+)
+
+/// Marks messages in this dialog as read using async/await.
+func markAsRead(
+    sequence: Int64
+) async throws
+
+/// Marks messages in this dialog as read using a completion handler.
+func markAsRead(
+    messageId: String,
+    completion: @escaping (Result<Void, ChatError>) -> Void
+)
+
+/// Marks messages in this dialog as read using async/await.
+func markAsRead(
+    messageId: String
+) async throws
+```
+
+```swift
+// Mark as read (completion-based)
+dialog.markAsRead(messageId: message.id) { result in
+    switch result {
+
+        case .success:
+            print("Marked as read up to \(message.id)")
+
+        case .failure(let error):
+            print("Failed to mark as read: \(error)")
+    }
+}
+
+// Or using async/await
+do {
+
+    if let sequence = message.sequence {
+        try await dialog.markAsRead(sequence: sequence)
+    } else {
+        try await dialog.markAsRead(messageId: message.id)
+    }
+
+} catch {
+
+    print("Failed to mark as read: \(error)")
+}
+```
+
+Unlike `editMessage`/`deleteMessages`, this operation is scoped to a dialog (`POST /api/v1/threads/{dialogId}/read`), so it is available only on `Dialog`, not on `ChatClient` — the same as `sendTyping`.
