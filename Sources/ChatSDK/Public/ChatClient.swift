@@ -421,6 +421,18 @@ public protocol ChatClient {
     ///
     /// - Parameter observer: Observer to remove.
     func removeConnectionObserver(_ observer: ConnectionObserver)
+
+    
+    /// Adds an observer for client-level events (e.g. resync required).
+    ///
+    /// - Parameter observer: Object conforming to `ChatClientObserver`.
+    func addClientObserver(_ observer: ChatClientObserver)
+
+    
+    /// Removes a previously added client observer.
+    ///
+    /// - Parameter observer: Observer to remove.
+    func removeClientObserver(_ observer: ChatClientObserver)
 }
 
 

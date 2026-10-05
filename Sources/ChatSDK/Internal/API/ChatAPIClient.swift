@@ -19,6 +19,7 @@ internal class ChatAPIClient: ChatAPI {
         static let contacts = "/api/v1/contacts"
         static let devices = "/api/v1/auth/devices"
         static let messages = "/api/v1/messages"
+        static let updates = "/api/v1/updates"
 
         static let searchMessages = "\(messages)/search"
         static let deleteMessages = "\(messages)/delete"
@@ -224,6 +225,27 @@ internal class ChatAPIClient: ChatAPI {
     }
 
 
+    func markAsRead(
+        dialogId: String,
+        position: ReadPosition
+    ) async throws {
+
+        guard let urlRequest = buildMarkAsReadRequest(
+            dialogId: dialogId,
+            position: position
+        ) else {
+            throw ChatError.invalidURL
+        }
+
+        _ = try await perform(urlRequest) {
+            try self.parseRegisterResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+
+
     func setReaction(
         messageId: String,
         emoji: String,
@@ -257,6 +279,23 @@ internal class ChatAPIClient: ChatAPI {
 
         return try await perform(urlRequest) {
             try self.parseDeleteMessagesResponse(
+                data: $0,
+                response: $1
+            )
+        }
+    }
+
+
+    func getUpdates(
+        cursor: String
+    ) async throws -> UpdatesResponseDto {
+
+        guard let urlRequest = buildUpdatesRequest(cursor: cursor) else {
+            throw ChatError.invalidURL
+        }
+
+        return try await perform(urlRequest) {
+            try self.parseUpdatesResponse(
                 data: $0,
                 response: $1
             )
@@ -690,6 +729,36 @@ internal class ChatAPIClient: ChatAPI {
     }
 
 
+    private func buildMarkAsReadRequest(
+        dialogId: String,
+        position: ReadPosition
+    ) -> URLRequest? {
+
+        guard let url = buildURL(
+            path: "\(APIPath.threads)/\(dialogId)/read"
+        ) else {
+            return nil
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        urlRequest.httpBody = try? jsonEncoder.encode(
+            MarkAsReadRequestDto(position)
+        )
+
+        return urlRequest
+    }
+
+
     private func buildSendReactionRequest(
         messageId: String,
         emoji: String,
@@ -742,6 +811,33 @@ internal class ChatAPIClient: ChatAPI {
 
         urlRequest.httpBody = try? jsonEncoder.encode(
             DeleteMessagesRequestDto(ids: ids)
+        )
+
+        return urlRequest
+    }
+
+
+    private func buildUpdatesRequest(
+        cursor: String
+    ) -> URLRequest? {
+
+        guard let url = buildURL(path: APIPath.updates) else {
+            return nil
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue(
+            "application/json",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        headerProvider.commonHeaders().forEach {
+            urlRequest.setValue($1, forHTTPHeaderField: $0)
+        }
+
+        urlRequest.httpBody = try? jsonEncoder.encode(
+            UpdatesRequestDto(cursor: cursor)
         )
 
         return urlRequest
@@ -864,6 +960,30 @@ internal class ChatAPIClient: ChatAPI {
                 error,
                 data: validData,
                 responseName: "delete messages response"
+            )
+            throw error
+        }
+    }
+
+
+    private func parseUpdatesResponse(
+        data: Data,
+        response: HTTPURLResponse
+    ) throws -> UpdatesResponseDto {
+
+        let validData =
+            try response.validate(data: data, logger: logger)
+
+        do {
+            return try jsonDecoder.decode(
+                UpdatesResponseDto.self,
+                from: validData
+            )
+        } catch {
+            logDecodingError(
+                error,
+                data: validData,
+                responseName: "updates response"
             )
             throw error
         }
@@ -1330,7 +1450,8 @@ internal class ChatAPIClient: ChatAPI {
             "id",
             "subject",
             "kind",
-            "last_msg"
+            "last_msg",
+            "read_states"
         ].map {
             URLQueryItem(name: "fields", value: $0)
         }

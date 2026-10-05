@@ -14,10 +14,12 @@ internal struct DialogDto: Decodable {
     let type: String
     let lastMessage: MessageDto?
     let members: [ParticipantDto]?
+    let readStates: [ReadStateDto]?
     
     enum CodingKeys: String, CodingKey {
         case id, type, subject, members
         case lastMessage = "last_msg"
+        case readStates = "read_states"
     }
 }
 

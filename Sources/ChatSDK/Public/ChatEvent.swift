@@ -78,9 +78,17 @@ public enum DialogEvent {
         dialog: any Dialog
     )
 
+    /// Emitted after the SDK recovers changes missed while
+    /// the realtime connection was temporarily unavailable.
+    case synchronized(
+        dialogId: String,
+        changes: DialogSyncChanges
+    )
+
     var dialogId: String {
         switch self {
-        case .created(let id, _):
+        case .created(let id, _),
+             .synchronized(let id, _):
             return id
         }
     }
@@ -92,27 +100,25 @@ public enum ReceiptEvent {
     case delivered(
         dialogId: String,
         member: Participant,
-        sequence: Int64
+        upToSequence: Int64
     )
 
     case read(
         dialogId: String,
         member: Participant,
-        sequence: Int64
+        upToSequence: Int64
     )
 
     case deliveryFailed(
         dialogId: String,
-        messageId: String,
-        member: Participant,
-        error: String
+        exception: DeliveryException
     )
 
     var dialogId: String {
         switch self {
         case .delivered(let id, _, _),
              .read(let id, _, _),
-             .deliveryFailed(let id, _, _, _):
+             .deliveryFailed(let id, _):
             return id
         }
     }

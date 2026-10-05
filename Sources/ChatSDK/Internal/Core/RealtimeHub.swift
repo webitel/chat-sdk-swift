@@ -13,6 +13,7 @@ internal final class RealtimeHub {
     private var globalObservers = NSHashTable<AnyObject>.weakObjects()
     private var dialogObservers: [String: NSHashTable<AnyObject>] = [:]
     private var connectionObservers = NSHashTable<AnyObject>.weakObjects()
+    private var clientObservers = NSHashTable<AnyObject>.weakObjects()
     private var publishedState: ConnectionState = .disconnected
     private let logger = SDKLogger.make("chat.core.hub")
     
@@ -115,6 +116,41 @@ internal final class RealtimeHub {
     ) {
         queue.async(flags: .barrier) {
             self.connectionObservers.remove(observer)
+        }
+    }
+    
+    
+    func addClientObserver(
+        _ observer: ChatClientObserver
+    ) {
+        queue.async(flags: .barrier) {
+            self.clientObservers.add(observer)
+        }
+    }
+    
+    
+    func removeClientObserver(
+        _ observer: ChatClientObserver
+    ) {
+        queue.async(flags: .barrier) {
+            self.clientObservers.remove(observer)
+        }
+    }
+    
+    
+    func notifyResyncRequired() {
+        let observers = queue.sync {
+            self.clientObservers.allObjects
+                .compactMap { $0 as? ChatClientObserver }
+        }
+
+        observers.forEach { observer in
+            safeNotify(
+                scope: "client",
+                event: "resyncRequired"
+            ) {
+                observer.onResyncRequired()
+            }
         }
     }
     

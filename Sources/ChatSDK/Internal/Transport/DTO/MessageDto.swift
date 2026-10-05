@@ -44,6 +44,7 @@ internal struct MessageDto: Decodable {
     let reactions: [MessageReactionDto]
     let replyTo: MessageReplyDto?
     let forwardOrigin: ForwardOriginDto?
+    let sequence: Int64?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -59,13 +60,33 @@ internal struct MessageDto: Decodable {
         case reactions
         case replyTo = "reply_to"
         case forwardOrigin = "forward_origin"
+        case sequence = "seq"
     }
 
     init(from decoder: Decoder) throws {
+        try self.init(from: decoder, fallbackDialogId: nil)
+    }
+
+    /// Decodes a message whose payload may omit `thread_id`
+    /// (e.g. messages nested inside an updates thread).
+    init(from decoder: Decoder, fallbackDialogId: String?) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
 
-        dialogId = try container.decode(String.self, forKey: .dialogId)
+        if let dialogId = try container.decodeIfPresent(String.self, forKey: .dialogId) {
+            self.dialogId = dialogId
+        } else if let fallbackDialogId {
+            self.dialogId = fallbackDialogId
+        } else {
+            throw DecodingError.keyNotFound(
+                CodingKeys.dialogId,
+                DecodingError.Context(
+                    codingPath: container.codingPath,
+                    debugDescription: "Missing thread_id for message \(id)"
+                )
+            )
+        }
+
         body = try? container.decodeIfPresent(String.self, forKey: .body)
 
         createdAt = try decodeTimestamp(
@@ -76,6 +97,11 @@ internal struct MessageDto: Decodable {
         editedAt = try? decodeTimestamp(
             container,
             key: .editedAt
+        )
+
+        sequence = try? decodeTimestamp(
+            container,
+            key: .sequence
         )
 
         do {
@@ -133,7 +159,8 @@ internal extension MessageDto {
             isOutgoing: currentUserId == from.contact.id.sub,
             reactions: (try? reactions.map { try $0.toDomain() }) ?? [],
             reply: replyTo?.toDomain(),
-            forwardOrigin: forwardOrigin?.toDomain()
+            forwardOrigin: forwardOrigin?.toDomain(),
+            sequence: sequence
         )
     }
 }

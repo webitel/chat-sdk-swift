@@ -16,6 +16,7 @@ internal class DefaultChatClient: ChatClient {
     private let realtimeTransport: RealtimeTransport
     private let fileTransferClient: HttpFileTransferClient
     private let hub: RealtimeHub
+    private let synchronizer: UpdatesSynchronizer
     
     private var realtimeEnabled: Bool = false
     private var isBackoffActive: Bool = false
@@ -51,7 +52,15 @@ internal class DefaultChatClient: ChatClient {
         self.hub = hub
         self.realtimeTransport = realtimeTransport
         self.fileTransferClient = fileTransferClient
+
+        // Initial request plus one retry
+        self.synchronizer = UpdatesSynchronizer(
+            maxAttempts: 2,
+            retryDelay: { _ in 1 }
+        )
+
         self.realtimeTransport.setObserver(self)
+        self.synchronizer.delegate = self
     }
     
     
@@ -278,6 +287,9 @@ internal class DefaultChatClient: ChatClient {
     
     
     func connect() {
+        // Ordered after a preceding `endSession()` reset on the synchronizer queue
+        synchronizer.activate()
+
         queue.async { [weak self] in
             guard let self else { return }
             
@@ -337,6 +349,7 @@ internal class DefaultChatClient: ChatClient {
     
     func endSession() async throws {
         disconnect()
+        synchronizer.reset()
         try await self.authManager.endSession()
     }
     
@@ -426,6 +439,36 @@ internal class DefaultChatClient: ChatClient {
         try await performWithAuthRetry {
 
             try await self.apiProvider.sendTyping(dialogId: dialogId, request: request)
+        }
+    }
+
+
+    func markAsRead(
+        dialogId: String,
+        position: ReadPosition,
+        completion: @escaping (Result<Void, ChatError>) -> Void
+    ) {
+        Task {
+            do {
+                try await self.markAsRead(dialogId: dialogId, position: position)
+
+                completion(.success(Void()))
+            } catch {
+                completion(
+                    .failure(error.asChatError)
+                )
+            }
+        }
+    }
+
+
+    func markAsRead(
+        dialogId: String,
+        position: ReadPosition
+    ) async throws {
+        try await performWithAuthRetry {
+
+            try await self.apiProvider.markAsRead(dialogId: dialogId, position: position)
         }
     }
 
@@ -642,6 +685,16 @@ internal class DefaultChatClient: ChatClient {
     }
     
     
+    func addClientObserver(_ observer: any ChatClientObserver) {
+        hub.addClientObserver(observer)
+    }
+    
+    
+    func removeClientObserver(_ observer: any ChatClientObserver) {
+        hub.removeClientObserver(observer)
+    }
+    
+    
     private func connectRealtime() {
         queue.async { [weak self] in
             guard let self else { return }
@@ -778,19 +831,23 @@ final class DeferredCancellable: Cancellable {
 
 
 extension DefaultChatClient: RealtimeObserver {
-    func onMessage(_ message: MessageDto) {
-        guard let messageDomain = message.toDomain(self.authManager.currentContact?.id) else {
-            return
-        }
+    func onMessage(_ message: MessageDto, cursor: String?) {
+        synchronizer.submit(cursor: cursor) { [weak self] in
+            guard let self,
+                  let messageDomain = message.toDomain(self.authManager.currentContact?.id)
+            else {
+                return
+            }
 
-        let dialog = self.dialogFactory.get(message.dialogId)
-        dialog?.applyMessage(messageDomain)
-        
-        self.hub.dispatch(
-            ChatEvent.message(
-                MessageEvent.received(dialogId: message.dialogId, message: messageDomain)
+            let dialog = self.dialogFactory.get(message.dialogId)
+            dialog?.applyMessage(messageDomain)
+
+            self.hub.dispatch(
+                ChatEvent.message(
+                    MessageEvent.received(dialogId: message.dialogId, message: messageDomain)
+                )
             )
-        )
+        }
     }
     
     
@@ -808,7 +865,14 @@ extension DefaultChatClient: RealtimeObserver {
     }
 
 
-    func onMessageReaction(_ dto: MessageReactionEventDto) {
+    func onMessageReaction(_ dto: MessageReactionEventDto, cursor: String?) {
+        synchronizer.submit(cursor: cursor) { [weak self] in
+            self?.applyMessageReaction(dto)
+        }
+    }
+
+
+    private func applyMessageReaction(_ dto: MessageReactionEventDto) {
         do {
             let reactions = try dto.reactions.map { try $0.toDomain() }
 
@@ -830,39 +894,88 @@ extension DefaultChatClient: RealtimeObserver {
     }
 
 
-    func onMessageDeleted(_ dto: MessageDeletedEventDto) {
-        let deletion = dto.toDomain()
+    func onMessageDeleted(_ dto: MessageDeletedEventDto, cursor: String?) {
+        synchronizer.submit(cursor: cursor) { [weak self] in
+            guard let self else { return }
 
-        self.dialogFactory.get(dto.dialogId)?.applyDeletion(messageId: dto.messageId)
+            let deletion = dto.toDomain()
 
-        self.hub.dispatch(
-            ChatEvent.message(
-                MessageEvent.deleted(dialogId: dto.dialogId, deletion: deletion)
+            self.dialogFactory.get(dto.dialogId)?.applyDeletion(messageId: dto.messageId)
+
+            self.hub.dispatch(
+                ChatEvent.message(
+                    MessageEvent.deleted(dialogId: dto.dialogId, deletion: deletion)
+                )
             )
-        )
+        }
     }
 
 
-    func onMessageEdited(_ dto: MessageEditedEventDto) {
-        let message = dto.toDomain(self.authManager.currentContact?.id)
-        let merged = self.dialogFactory.get(dto.dialogId)?.applyEdit(message) ?? message
+    func onMessageEdited(_ dto: MessageEditedEventDto, cursor: String?) {
+        synchronizer.submit(cursor: cursor) { [weak self] in
+            guard let self else { return }
 
-        self.hub.dispatch(
-            ChatEvent.message(
-                MessageEvent.edited(dialogId: dto.dialogId, message: merged)
+            let message = dto.toDomain(self.authManager.currentContact?.id)
+            let merged = self.dialogFactory.get(dto.dialogId)?.applyEdit(message) ?? message
+
+            self.hub.dispatch(
+                ChatEvent.message(
+                    MessageEvent.edited(dialogId: dto.dialogId, message: merged)
+                )
             )
-        )
+        }
     }
 
 
-    func onNewDialog(_ dialog: DialogDto) {
-        let newDialog = self.dialogFactory.getOrCreate(client: self, dto: dialog)
-        
-        self.hub.dispatch(
-            ChatEvent.dialog(
-                DialogEvent.created(dialogId: newDialog.id, dialog: newDialog)
+    func onMessageStatus(_ dto: MessageStatusEventDto, cursor: String?) {
+        synchronizer.submit(cursor: cursor) { [weak self] in
+            guard let self else { return }
+
+            // TODO: map failed delivery statuses to `ReceiptEvent.deliveryFailed`
+            guard let kind = dto.receiptKind else {
+                self.logger.warning("Unsupported message status: \(dto.status)")
+                return
+            }
+
+            let member = dto.member.toDomain()
+
+            // Unknown dialog: no local state to compare against, dispatch as is
+            let advanced = self.dialogFactory.get(dto.dialogId)?
+                .applyReceipt(member: member, kind: kind, upToSequence: dto.upToSeq) ?? true
+
+            guard advanced else { return }
+
+            let event: ReceiptEvent
+
+            switch kind {
+            case .delivered:
+                event = .delivered(dialogId: dto.dialogId, member: member, upToSequence: dto.upToSeq)
+            case .read:
+                event = .read(dialogId: dto.dialogId, member: member, upToSequence: dto.upToSeq)
+            }
+
+            self.hub.dispatch(ChatEvent.receipt(event))
+        }
+    }
+
+
+    func onNewDialog(_ dialog: DialogDto, cursor: String?) {
+        synchronizer.submit(cursor: cursor) { [weak self] in
+            guard let self else { return }
+
+            let newDialog = self.dialogFactory.getOrCreate(client: self, dto: dialog)
+
+            self.hub.dispatch(
+                ChatEvent.dialog(
+                    DialogEvent.created(dialogId: newDialog.id, dialog: newDialog)
+                )
             )
-        )
+        }
+    }
+
+
+    func onConnectedEvent(cursor: String?) {
+        synchronizer.onConnected(serverCursor: cursor)
     }
     
     
@@ -1011,5 +1124,80 @@ extension DefaultChatClient: RealtimeObserver {
             deadline: .now() + delay,
             execute: workItem
         )
+    }
+}
+
+
+extension DefaultChatClient: UpdatesSynchronizerDelegate {
+    func fetchUpdates(cursor: String) async throws -> UpdatesResponseDto {
+        try await performWithAuthRetry {
+            try await self.apiProvider.getUpdates(cursor: cursor)
+        }
+    }
+
+
+    func applyUpdates(_ threads: [ThreadUpdatesDto]) {
+        let currentUserId = self.currentUserId
+
+        threads.forEach { thread in
+            let messages = thread.messages
+                .compactMap { $0.toDomain(currentUserId) }
+                .sorted { ($0.sequence ?? 0) < ($1.sequence ?? 0) }
+
+            let memberChanges = thread.memberChanges.compactMap { $0.toDomain() }
+
+            let dialog: DialogImpl?
+
+            if let dto = thread.dialog {
+                let (resolved, isNew) = self.dialogFactory.getOrCreateReportingNew(client: self, dto: dto)
+                dialog = resolved
+
+                // Dialog created while offline: announce it before its changes
+                if isNew {
+                    self.hub.dispatch(
+                        ChatEvent.dialog(
+                            DialogEvent.created(dialogId: resolved.id, dialog: resolved)
+                        )
+                    )
+                }
+            } else {
+                dialog = self.dialogFactory.get(thread.threadId)
+                dialog?.applySync(
+                    lastMessage: thread.topMessage?.toDomain(currentUserId) ?? messages.last,
+                    deletedMessageIds: thread.deletedMessageIds
+                )
+
+                // Before resolving read states, so newly added members are known
+                dialog?.applyMemberChanges(memberChanges)
+            }
+
+            let members = thread.dialog?.members?.map { $0.toDomain() } ?? dialog?.members ?? []
+            let recoveredStates = thread.readStates.compactMap { $0.toDomain(members: members) }
+
+            // Expose the merged horizons, the same ones the dialog now holds
+            let participantStates = dialog?.mergeParticipantStates(recoveredStates) ?? recoveredStates
+
+            let changes = DialogSyncChanges(
+                unreadCount: thread.unreadCount,
+                messages: messages,
+                deletedMessageIds: thread.deletedMessageIds,
+                participantStates: participantStates,
+                // TODO: map once the server exposes delivery failures in updates
+                deliveryExceptions: [],
+                memberChanges: memberChanges,
+                hasLeft: thread.left
+            )
+
+            self.hub.dispatch(
+                ChatEvent.dialog(
+                    DialogEvent.synchronized(dialogId: thread.threadId, changes: changes)
+                )
+            )
+        }
+    }
+
+
+    func resyncRequired() {
+        hub.notifyResyncRequired()
     }
 }

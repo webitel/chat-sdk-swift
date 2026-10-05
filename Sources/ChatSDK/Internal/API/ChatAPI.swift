@@ -51,6 +51,11 @@ internal protocol ChatAPI: AnyObject {
         request: TypingRequest
     ) async throws
 
+    func markAsRead(
+        dialogId: String,
+        position: ReadPosition
+    ) async throws
+
     func setReaction(
         messageId: String,
         emoji: String,
@@ -71,4 +76,8 @@ internal protocol ChatAPI: AnyObject {
         messageId: String,
         text: String
     ) async throws -> EditMessageResponseDto
+
+    func getUpdates(
+        cursor: String
+    ) async throws -> UpdatesResponseDto
 }

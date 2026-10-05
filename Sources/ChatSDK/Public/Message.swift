@@ -43,6 +43,12 @@ public struct Message: Hashable, Codable {
     /// Original source if this message was forwarded, nil otherwise.
     public let forwardOrigin: ForwardOrigin?
 
+    /// Position of the message within its dialog, nil if not provided by the server.
+    ///
+    /// Compare with `ParticipantState.readUpToSequence` and
+    /// `ReceiptEvent` sequences to resolve delivery/read state.
+    public let sequence: Int64?
+
     public init(
         id: String,
         dialogId: String,
@@ -54,7 +60,8 @@ public struct Message: Hashable, Codable {
         isOutgoing: Bool,
         reactions: [MessageReaction],
         reply: MessageReply? = nil,
-        forwardOrigin: ForwardOrigin? = nil
+        forwardOrigin: ForwardOrigin? = nil,
+        sequence: Int64? = nil
     ) {
         self.id = id
         self.dialogId = dialogId
@@ -67,6 +74,7 @@ public struct Message: Hashable, Codable {
         self.reactions = reactions
         self.reply = reply
         self.forwardOrigin = forwardOrigin
+        self.sequence = sequence
     }
 }
 

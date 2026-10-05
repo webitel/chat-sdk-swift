@@ -19,6 +19,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     private(set) var connectionState: ConnectionState = .disconnected
     
     private let wssPath = "/im/ws"
+    private let cursorKey = "updates_cursor"
     
     private let logger = SDKLogger.make("chat.realtime")
     private let syncConnectQueue = DispatchQueue(label: "chat.realtime")
@@ -271,10 +272,12 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
         }
         
         let event = RealtimeEventType.from(payload: payload)
+        let cursor = extractCursor(payload: payload, event: event)
+
         switch event {
                 
             case .connected:
-                handleConnected(payload)
+                handleConnected(cursor: cursor)
                 
             case .disconnected:
                 handleDisconnected(payload)
@@ -285,19 +288,22 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
                     sendAck(eventId: eventId)
                 }
                 
-                handleMessageEvent(payload)
+                handleMessageEvent(payload, cursor: cursor)
 
             case .typing:
                 handleTypingEvent(payload)
 
             case .messageReaction:
-                handleMessageReactionEvent(payload)
+                handleMessageReactionEvent(payload, cursor: cursor)
 
             case .messageDeleted:
-                handleMessageDeletedEvent(payload)
+                handleMessageDeletedEvent(payload, cursor: cursor)
 
             case .messageEdited:
-                handleMessageEditedEvent(payload)
+                handleMessageEditedEvent(payload, cursor: cursor)
+
+            case .messageStatus:
+                handleMessageStatusEvent(payload, cursor: cursor)
 
             case .ack:
                 handleAck(payload)
@@ -309,7 +315,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
                 handlePing(payload)
                 
             case .dialogCreated:
-                handleDialogCreated(payload)
+                handleDialogCreated(payload, cursor: cursor)
                 
             case .unsupported:
                 logger.warning("unsupported event - \(payload)")
@@ -318,13 +324,14 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     
     
     private func handleMessageEvent(
-        _ payload: [String: Any]
+        _ payload: [String: Any],
+        cursor: String?
     ) {
         do {
             let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.message.rawValue]!)
             let dto = try jsonDecoder.decode(MessageDto.self, from: data)
             
-            observer?.onMessage(dto)
+            observer?.onMessage(dto, cursor: cursor)
             
         } catch {
             logger.warning("Failed to decode message event: \(error)")
@@ -348,13 +355,14 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
 
 
     private func handleMessageReactionEvent(
-        _ payload: [String: Any]
+        _ payload: [String: Any],
+        cursor: String?
     ) {
         do {
             let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageReaction.rawValue]!)
             let dto = try jsonDecoder.decode(MessageReactionEventDto.self, from: data)
 
-            observer?.onMessageReaction(dto)
+            observer?.onMessageReaction(dto, cursor: cursor)
 
         } catch {
             logger.warning("Failed to decode message reaction event: \(error)")
@@ -363,13 +371,14 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
 
 
     private func handleMessageDeletedEvent(
-        _ payload: [String: Any]
+        _ payload: [String: Any],
+        cursor: String?
     ) {
         do {
             let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageDeleted.rawValue]!)
             let dto = try jsonDecoder.decode(MessageDeletedEventDto.self, from: data)
 
-            observer?.onMessageDeleted(dto)
+            observer?.onMessageDeleted(dto, cursor: cursor)
 
         } catch {
             logger.warning("Failed to decode message deleted event: \(error)")
@@ -378,13 +387,14 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
 
 
     private func handleMessageEditedEvent(
-        _ payload: [String: Any]
+        _ payload: [String: Any],
+        cursor: String?
     ) {
         do {
             let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageEdited.rawValue]!)
             let dto = try jsonDecoder.decode(MessageEditedEventDto.self, from: data)
 
-            observer?.onMessageEdited(dto)
+            observer?.onMessageEdited(dto, cursor: cursor)
 
         } catch {
             logger.warning("Failed to decode message edited event: \(error)")
@@ -392,14 +402,31 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     }
 
 
+    private func handleMessageStatusEvent(
+        _ payload: [String: Any],
+        cursor: String?
+    ) {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageStatus.rawValue]!)
+            let dto = try jsonDecoder.decode(MessageStatusEventDto.self, from: data)
+
+            observer?.onMessageStatus(dto, cursor: cursor)
+
+        } catch {
+            logger.warning("Failed to decode message status event: \(error)")
+        }
+    }
+
+
     private func handleDialogCreated(
-        _ payload: [String: Any]
+        _ payload: [String: Any],
+        cursor: String?
     ) {
         do {
             let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.dialogCreated.rawValue]!)
             let dto = try jsonDecoder.decode(DialogDto.self, from: data)
             
-            observer?.onNewDialog(dto)
+            observer?.onNewDialog(dto, cursor: cursor)
             
         } catch {
             logger.warning("Failed to decode new dialog event: \(error)")
@@ -408,7 +435,30 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     
     private func handleError(_ payload: [String: Any]) {}
     private func handleAck(_ payload: [String: Any]) {}
-    private func handleConnected(_ payload: [String: Any]) {}
+
+
+    private func handleConnected(cursor: String?) {
+        observer?.onConnectedEvent(cursor: cursor)
+    }
+
+
+    /// Reads the updates cursor from the event body (`payload.<event>.updates_cursor`).
+    private func extractCursor(
+        payload: [String: Any],
+        event: RealtimeEventType
+    ) -> String? {
+
+        let body = payload[event.rawValue] as? [String: Any]
+
+        switch body?[cursorKey] {
+            case let value as String where !value.isEmpty:
+                return value
+            case let value as NSNumber:
+                return value.stringValue
+            default:
+                return nil
+        }
+    }
     
     
     private func handleDisconnected(_ payload: [String: Any]) {

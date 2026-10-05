@@ -24,6 +24,12 @@ public protocol Dialog: Hashable {
     /// Last message in the dialog, if available.
     var lastMessage: Message? { get }
 
+    /// Current delivery/read horizons for dialog participants.
+    var participantStates: [ParticipantState] { get }
+
+    /// Current known delivery failures.
+    var deliveryExceptions: [DeliveryException] { get }
+
     /// Sends a message.
     ///
     /// - Note: Does not require an active realtime connection.
@@ -96,6 +102,48 @@ public protocol Dialog: Hashable {
     /// - Throws: `ChatError` if operation fails.
     func sendTyping(
         request: TypingRequest
+    ) async throws
+
+
+    /// Marks messages in this dialog as read up to and including the given sequence.
+    ///
+    /// - Parameters:
+    ///   - sequence: Sequence of the last read message (`Message.sequence`).
+    ///   - completion: Completion handler called with the result of the operation.
+    func markAsRead(
+        sequence: Int64,
+        completion: @escaping (Result<Void, ChatError>) -> Void
+    )
+
+
+    /// Marks messages in this dialog as read using async/await.
+    ///
+    /// - Parameter sequence: Sequence of the last read message (`Message.sequence`).
+    /// - Throws: `ChatError` if operation fails.
+    func markAsRead(
+        sequence: Int64
+    ) async throws
+
+
+    /// Marks messages in this dialog as read up to and including the given message.
+    ///
+    /// Use this when `Message.sequence` is not available.
+    ///
+    /// - Parameters:
+    ///   - messageId: Identifier of the last read message (`Message.id`).
+    ///   - completion: Completion handler called with the result of the operation.
+    func markAsRead(
+        messageId: String,
+        completion: @escaping (Result<Void, ChatError>) -> Void
+    )
+
+
+    /// Marks messages in this dialog as read using async/await.
+    ///
+    /// - Parameter messageId: Identifier of the last read message (`Message.id`).
+    /// - Throws: `ChatError` if operation fails.
+    func markAsRead(
+        messageId: String
     ) async throws
 
 
