@@ -215,15 +215,14 @@ internal extension MemberChangeDto {
 
 
 internal extension MemberChangeAction {
-    // TODO: confirm THREAD_MEMBER_CHANGE_ACTION_* values with backend
     static func from(_ raw: String) -> MemberChangeAction {
         let value = raw.uppercased()
 
-        if value.hasSuffix("ADDED") || value.hasSuffix("ADD") || value.hasSuffix("JOINED") {
+        if value.hasSuffix("JOINED") {
             return .added
         }
 
-        if value.hasSuffix("REMOVED") || value.hasSuffix("REMOVE") || value.hasSuffix("LEFT") {
+        if value.hasSuffix("LEFT") {
             return .removed
         }
 

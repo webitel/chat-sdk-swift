@@ -1249,18 +1249,19 @@ internal class ChatAPIClient: ChatAPI {
         
         if let cursor = request.cursor {
             queryItems.append(URLQueryItem(name: "cursor.id", value: cursor.messageId))
-            queryItems.append(
-                URLQueryItem(
-                    name: "cursor.before",
-                    value: cursor.direction == .newer
-                    ? "true"
-                    : "false"
-                )
-            )
+
+            switch cursor.direction {
+            case .around:
+                queryItems.append(URLQueryItem(name: "cursor.around", value: "true"))
+            case .newer:
+                queryItems.append(URLQueryItem(name: "cursor.before", value: "true"))
+            case .older:
+                queryItems.append(URLQueryItem(name: "cursor.before", value: "false"))
+            }
         }
-        
+
         components?.queryItems = queryItems
-        
+
         return components?.url
     }
     

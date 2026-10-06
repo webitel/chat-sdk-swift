@@ -366,6 +366,12 @@ public struct HistoryCursor: Hashable, Codable {
 }
 ```
 
+`MoveDirection` values:
+
+- `.older` — load messages older than the cursor (default)  
+- `.newer` — load messages newer than the cursor  
+- `.around` — load messages around the cursor (both older and newer)  
+
 
 ### Result
 
@@ -398,6 +404,22 @@ This is useful, for example, after reconnect:
 - set direction to `.newer`  
 
 This allows checking whether new messages appeared while the connection was unavailable.
+
+
+### Jumping to a Message
+
+To open history at a specific message (for example, when the user taps a message search result), use the `.around` direction. The dialog can be resolved via `message.dialogId`.
+
+```swift
+let request = HistoryRequest(
+    limit: 50,
+    cursor: HistoryCursor(messageId: message.id, direction: .around)
+)
+
+let slice = try await dialog.getHistory(request: request)
+
+// Continue pagination from this point using slice.olderCursor / slice.newerCursor
+```
 
 
 ## Deleting Messages

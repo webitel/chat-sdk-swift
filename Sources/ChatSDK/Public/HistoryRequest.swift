@@ -55,6 +55,7 @@ public enum MoveDirection: String, Codable {
     /// Load messages newer than the cursor.
     case newer
     
-    /// Load messages around the cursor.
-//    case around
+    /// Load messages around the cursor (both older and newer).
+    /// Useful for jumping to a specific message, e.g. a message search result.
+    case around
 }
