@@ -24,6 +24,9 @@ public protocol Dialog: Hashable {
     /// Last message in the dialog, if available.
     var lastMessage: Message? { get }
 
+    /// Number of messages in the dialog not yet read by the current user.
+    var unreadCount: Int { get }
+
     /// Current delivery/read horizons for dialog participants.
     var participantStates: [ParticipantState] { get }
 

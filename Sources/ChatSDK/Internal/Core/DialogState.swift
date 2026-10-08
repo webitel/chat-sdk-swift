@@ -15,6 +15,7 @@ internal struct DialogState {
     var subject: String
     var members: [Participant]
     var lastMessage: Message?
+    var unreadCount: Int = 0
     var participantStates: [ParticipantState] = []
     var deliveryExceptions: [DeliveryException] = []
 }
@@ -37,6 +38,7 @@ extension DialogState {
             lastMessage:
                 dto.lastMessage?
                 .toDomain(currentUserId),
+            unreadCount: dto.unreadCount ?? 0,
             participantStates:
                 dto.readStates?.compactMap {
                     $0.toDomain(members: members)

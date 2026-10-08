@@ -20,6 +20,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     
     private let wssPath = "/im/ws"
     private let cursorKey = "updates_cursor"
+    private let unreadCountKey = "unread_count"
     
     private let logger = SDKLogger.make("chat.realtime")
     private let syncConnectQueue = DispatchQueue(label: "chat.realtime")
@@ -251,7 +252,8 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     }
     
     
-    private func handleMessage(
+    /// Internal (not private) for tests.
+    func handleMessage(
         _ text: String
     ) {
         logger.debug("received \(text)")
@@ -328,10 +330,11 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
         cursor: String?
     ) {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.message.rawValue]!)
+            let data = try eventData(payload, event: .message)
             let dto = try jsonDecoder.decode(MessageDto.self, from: data)
-            
-            observer?.onMessage(dto, cursor: cursor)
+            let unreadCount = extractUnreadCount(payload[RealtimeEventType.message.rawValue] as? [String: Any])
+
+            observer?.onMessage(dto, unreadCount: unreadCount, cursor: cursor)
             
         } catch {
             logger.warning("Failed to decode message event: \(error)")
@@ -343,7 +346,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
         _ payload: [String: Any]
     ) {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.typing.rawValue]!)
+            let data = try eventData(payload, event: .typing)
             let dto = try jsonDecoder.decode(TypingEventDto.self, from: data)
 
             observer?.onTyping(dto)
@@ -359,7 +362,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
         cursor: String?
     ) {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageReaction.rawValue]!)
+            let data = try eventData(payload, event: .messageReaction)
             let dto = try jsonDecoder.decode(MessageReactionEventDto.self, from: data)
 
             observer?.onMessageReaction(dto, cursor: cursor)
@@ -375,7 +378,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
         cursor: String?
     ) {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageDeleted.rawValue]!)
+            let data = try eventData(payload, event: .messageDeleted)
             let dto = try jsonDecoder.decode(MessageDeletedEventDto.self, from: data)
 
             observer?.onMessageDeleted(dto, cursor: cursor)
@@ -391,7 +394,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
         cursor: String?
     ) {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageEdited.rawValue]!)
+            let data = try eventData(payload, event: .messageEdited)
             let dto = try jsonDecoder.decode(MessageEditedEventDto.self, from: data)
 
             observer?.onMessageEdited(dto, cursor: cursor)
@@ -407,7 +410,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
         cursor: String?
     ) {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.messageStatus.rawValue]!)
+            let data = try eventData(payload, event: .messageStatus)
             let dto = try jsonDecoder.decode(MessageStatusEventDto.self, from: data)
 
             observer?.onMessageStatus(dto, cursor: cursor)
@@ -423,7 +426,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
         cursor: String?
     ) {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.dialogCreated.rawValue]!)
+            let data = try eventData(payload, event: .dialogCreated)
             let dto = try jsonDecoder.decode(DialogDto.self, from: data)
             
             observer?.onNewDialog(dto, cursor: cursor)
@@ -439,6 +442,37 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
 
     private func handleConnected(cursor: String?) {
         observer?.onConnectedEvent(cursor: cursor)
+    }
+
+
+    /// Serializes the event body (`payload.<event>`) for decoding.
+    ///
+    /// Throws instead of passing a missing, `null` or scalar body to `JSONSerialization`,
+    /// which raises an uncatchable Objective-C exception for non-collection objects.
+    private func eventData(_ payload: [String: Any], event: RealtimeEventType) throws -> Data {
+        guard let body = payload[event.rawValue] as? [String: Any] else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [],
+                    debugDescription: "Missing or invalid body for \(event.rawValue)"
+                )
+            )
+        }
+
+        return try JSONSerialization.data(withJSONObject: body)
+    }
+
+
+    /// Reads the current user's unread count from the event body (`unread_count`).
+    private func extractUnreadCount(_ body: [String: Any]?) -> Int? {
+        switch body?[unreadCountKey] {
+            case let value as NSNumber:
+                return max(0, value.intValue)
+            case let value as String:
+                return Int(value).map { max(0, $0) }
+            default:
+                return nil
+        }
     }
 
 
@@ -463,7 +497,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     
     private func handleDisconnected(_ payload: [String: Any]) {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.disconnected.rawValue]!)
+            let data = try eventData(payload, event: .disconnected)
             let dto = try jsonDecoder.decode(DisconnectDto.self, from: data)
             
             closeStream(code: URLSessionWebSocketTask.CloseCode.init(rawValue: dto.code ?? 1000) ?? .normalClosure, reason: dto.reason)

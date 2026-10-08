@@ -8,24 +8,6 @@
 import Foundation
 
 
-/// Decodes an Int64 sent either as a JSON number or a numeric string.
-fileprivate func decodeFlexibleInt64<Key: CodingKey>(
-    _ container: KeyedDecodingContainer<Key>,
-    key: Key
-) -> Int64? {
-
-    if let intValue = try? container.decodeIfPresent(Int64.self, forKey: key) {
-        return intValue
-    }
-
-    if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
-        return Int64(stringValue)
-    }
-
-    return nil
-}
-
-
 internal struct UpdatesResponseDto: Decodable {
     let cursor: String
     let resync: Bool
@@ -58,7 +40,8 @@ internal struct ThreadUpdatesDto: Decodable {
 
     let threadId: String
     let dialog: DialogDto?
-    let unreadCount: Int
+    /// `nil` when the update does not carry the count.
+    let unreadCount: Int?
     let messages: [MessageDto]
     let topMessage: MessageDto?
     let deletedMessageIds: [String]
@@ -88,7 +71,7 @@ internal struct ThreadUpdatesDto: Decodable {
             dialog = nil
         }
 
-        unreadCount = decodeFlexibleInt64(container, key: .unreadCount).map { Int($0) } ?? 0
+        unreadCount = decodeUnreadCount(container, key: .unreadCount)
         messages = Self.decodeMessages(container, threadId: threadId)
 
         if container.contains(.topMessage),

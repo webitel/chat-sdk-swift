@@ -27,6 +27,7 @@ internal final class DialogImpl: Dialog {
     var members: [Participant] { withState { $0.members } }
     var subject: String { withState { $0.subject } }
     var lastMessage: Message? { withState { $0.lastMessage } }
+    var unreadCount: Int { withState { $0.unreadCount } }
     var participantStates: [ParticipantState] { withState { $0.participantStates } }
     var deliveryExceptions: [DeliveryException] { withState { $0.deliveryExceptions } }
 
@@ -195,15 +196,26 @@ internal final class DialogImpl: Dialog {
             state.subject = dto.subject
             state.members = members
             state.lastMessage = lastMessage
+            if let unreadCount = dto.unreadCount {
+                state.unreadCount = unreadCount
+            }
             Self.merge(readStates, into: &state.participantStates)
         }
     }
 
 
-    /// Advances the participant's receipt horizon.
+    /// Advances the participant's receipt horizon and, when provided,
+    /// the current user's unread count.
+    ///
+    /// A duplicate read receipt still updates the unread count; a stale one is ignored.
     ///
     /// - Returns: `true` if the horizon moved forward, `false` for stale or duplicate receipts.
-    func applyReceipt(member: Participant, kind: ReceiptKind, upToSequence: Int64) -> Bool {
+    func applyReceipt(
+        member: Participant,
+        kind: ReceiptKind,
+        upToSequence: Int64,
+        unreadCount: Int?
+    ) -> Bool {
         withState { state in
             let index = state.participantStates.firstIndex { $0.member.id == member.id }
             let current = index.map { state.participantStates[$0] }
@@ -221,6 +233,11 @@ internal final class DialogImpl: Dialog {
                 )
 
             case .read:
+                // A repeated horizon still carries the server's current count: corrects local drift
+                if let unreadCount, upToSequence == current.readUpToSequence {
+                    state.unreadCount = unreadCount
+                }
+
                 guard upToSequence > current.readUpToSequence else { return false }
                 updated = ParticipantState(
                     member: member,
@@ -233,6 +250,10 @@ internal final class DialogImpl: Dialog {
                 state.participantStates[index] = updated
             } else {
                 state.participantStates.append(updated)
+            }
+
+            if let unreadCount {
+                state.unreadCount = unreadCount
             }
 
             return true
@@ -300,8 +321,37 @@ internal final class DialogImpl: Dialog {
     }
 
 
-    func applyMessage(_ message: Message) {
-        withState { $0.lastMessage = message }
+    func applyUnreadCount(_ unreadCount: Int) {
+        withState { $0.unreadCount = unreadCount }
+    }
+
+
+    /// Sets the last message and updates the unread count.
+    ///
+    /// Uses `unreadCount` from the server when present; otherwise counts an incoming
+    /// message newer than the current user's read horizon. A repeated message is not counted twice.
+    func applyMessage(_ message: Message, unreadCount: Int?, currentUserId: String?) {
+        withState { state in
+            let isRepeated = state.lastMessage?.id == message.id
+            state.lastMessage = message
+
+            if let unreadCount {
+                state.unreadCount = unreadCount
+                return
+            }
+
+            guard !message.isOutgoing, !isRepeated else { return }
+
+            let readHorizon = state.participantStates
+                .first { $0.member.contact.id.sub == currentUserId }?
+                .readUpToSequence ?? 0
+
+            if let sequence = message.sequence, sequence <= readHorizon {
+                return
+            }
+
+            state.unreadCount += 1
+        }
     }
 
 
@@ -321,8 +371,12 @@ internal final class DialogImpl: Dialog {
     }
 
 
-    func applySync(lastMessage: Message?, deletedMessageIds: [String]) {
+    func applySync(lastMessage: Message?, deletedMessageIds: [String], unreadCount: Int?) {
         withState { state in
+            if let unreadCount {
+                state.unreadCount = unreadCount
+            }
+
             if let id = state.lastMessage?.id, deletedMessageIds.contains(id) {
                 state.lastMessage = nil
             }

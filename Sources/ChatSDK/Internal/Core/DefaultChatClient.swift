@@ -831,16 +831,20 @@ final class DeferredCancellable: Cancellable {
 
 
 extension DefaultChatClient: RealtimeObserver {
-    func onMessage(_ message: MessageDto, cursor: String?) {
+    func onMessage(_ message: MessageDto, unreadCount: Int?, cursor: String?) {
         synchronizer.submit(cursor: cursor) { [weak self] in
-            guard let self,
-                  let messageDomain = message.toDomain(self.authManager.currentContact?.id)
-            else {
-                return
-            }
+            guard let self else { return }
+
+            let currentUserId = self.authManager.currentContact?.id
+
+            guard let messageDomain = message.toDomain(currentUserId) else { return }
 
             let dialog = self.dialogFactory.get(message.dialogId)
-            dialog?.applyMessage(messageDomain)
+            dialog?.applyMessage(
+                messageDomain,
+                unreadCount: unreadCount,
+                currentUserId: currentUserId
+            )
 
             self.hub.dispatch(
                 ChatEvent.message(
@@ -941,7 +945,12 @@ extension DefaultChatClient: RealtimeObserver {
 
             // Unknown dialog: no local state to compare against, dispatch as is
             let advanced = self.dialogFactory.get(dto.dialogId)?
-                .applyReceipt(member: member, kind: kind, upToSequence: dto.upToSeq) ?? true
+                .applyReceipt(
+                    member: member,
+                    kind: kind,
+                    upToSequence: dto.upToSeq,
+                    unreadCount: dto.unreadCount
+                ) ?? true
 
             guard advanced else { return }
 
@@ -951,7 +960,12 @@ extension DefaultChatClient: RealtimeObserver {
             case .delivered:
                 event = .delivered(dialogId: dto.dialogId, member: member, upToSequence: dto.upToSeq)
             case .read:
-                event = .read(dialogId: dto.dialogId, member: member, upToSequence: dto.upToSeq)
+                event = .read(
+                    dialogId: dto.dialogId,
+                    member: member,
+                    upToSequence: dto.upToSeq,
+                    unreadCount: dto.unreadCount
+                )
             }
 
             self.hub.dispatch(ChatEvent.receipt(event))
@@ -1152,6 +1166,10 @@ extension DefaultChatClient: UpdatesSynchronizerDelegate {
                 let (resolved, isNew) = self.dialogFactory.getOrCreateReportingNew(client: self, dto: dto)
                 dialog = resolved
 
+                if dto.unreadCount == nil, let unreadCount = thread.unreadCount {
+                    resolved.applyUnreadCount(unreadCount)
+                }
+
                 // Dialog created while offline: announce it before its changes
                 if isNew {
                     self.hub.dispatch(
@@ -1164,7 +1182,8 @@ extension DefaultChatClient: UpdatesSynchronizerDelegate {
                 dialog = self.dialogFactory.get(thread.threadId)
                 dialog?.applySync(
                     lastMessage: thread.topMessage?.toDomain(currentUserId) ?? messages.last,
-                    deletedMessageIds: thread.deletedMessageIds
+                    deletedMessageIds: thread.deletedMessageIds,
+                    unreadCount: thread.unreadCount
                 )
 
                 // Before resolving read states, so newly added members are known
@@ -1178,7 +1197,8 @@ extension DefaultChatClient: UpdatesSynchronizerDelegate {
             let participantStates = dialog?.mergeParticipantStates(recoveredStates) ?? recoveredStates
 
             let changes = DialogSyncChanges(
-                unreadCount: thread.unreadCount,
+                // Same value the dialog now holds
+                unreadCount: dialog?.unreadCount ?? thread.unreadCount ?? 0,
                 messages: messages,
                 deletedMessageIds: thread.deletedMessageIds,
                 participantStates: participantStates,

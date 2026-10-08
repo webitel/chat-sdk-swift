@@ -14,12 +14,15 @@ internal struct MessageStatusEventDto: Decodable {
     let member: ParticipantDto
     let upToSeq: Int64
     let occurredAt: Int64?
+    /// Current user's unread count, present only when the event is about the current user.
+    let unreadCount: Int?
 
     private enum CodingKeys: String, CodingKey {
         case status, member
         case dialogId = "thread_id"
         case upToSeq = "up_to_seq"
         case occurredAt = "occurred_at"
+        case unreadCount = "unread_count"
     }
 
     init(from decoder: Decoder) throws {
@@ -28,7 +31,7 @@ internal struct MessageStatusEventDto: Decodable {
         status = try container.decode(String.self, forKey: .status)
         member = try container.decode(ParticipantDto.self, forKey: .member)
 
-        guard let upToSeq = Self.decodeInt64(container, key: .upToSeq) else {
+        guard let upToSeq = decodeFlexibleInt64(container, key: .upToSeq) else {
             throw DecodingError.dataCorruptedError(
                 forKey: .upToSeq,
                 in: container,
@@ -37,23 +40,8 @@ internal struct MessageStatusEventDto: Decodable {
         }
 
         self.upToSeq = upToSeq
-        occurredAt = Self.decodeInt64(container, key: .occurredAt)
-    }
-
-    private static func decodeInt64(
-        _ container: KeyedDecodingContainer<CodingKeys>,
-        key: CodingKeys
-    ) -> Int64? {
-
-        if let intValue = try? container.decode(Int64.self, forKey: key) {
-            return intValue
-        }
-
-        if let stringValue = try? container.decode(String.self, forKey: key) {
-            return Int64(stringValue)
-        }
-
-        return nil
+        occurredAt = decodeFlexibleInt64(container, key: .occurredAt)
+        unreadCount = decodeUnreadCount(container, key: .unreadCount)
     }
 }
 

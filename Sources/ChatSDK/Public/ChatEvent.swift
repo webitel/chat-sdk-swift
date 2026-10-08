@@ -103,10 +103,13 @@ public enum ReceiptEvent {
         upToSequence: Int64
     )
 
+    /// `unreadCount` is the current user's unread count after the receipt;
+    /// present only when `member` is the current user, `nil` otherwise.
     case read(
         dialogId: String,
         member: Participant,
-        upToSequence: Int64
+        upToSequence: Int64,
+        unreadCount: Int?
     )
 
     case deliveryFailed(
@@ -117,7 +120,7 @@ public enum ReceiptEvent {
     var dialogId: String {
         switch self {
         case .delivered(let id, _, _),
-             .read(let id, _, _),
+             .read(let id, _, _, _),
              .deliveryFailed(let id, _):
             return id
         }

@@ -47,8 +47,13 @@ protocol Dialog: Hashable {
 
     /// Last message sent in the dialog, if available.
     var lastMessage: Message? { get }
+
+    /// Number of messages not yet read by the current user.
+    var unreadCount: Int { get }
 }
 ```
+
+`unreadCount` is loaded with the dialog and kept up to date by the SDK: incoming messages (`.message(.received)`), the current user's read receipts (`.receipt(.read)`, including reads from other devices) and [synchronization](events.md#synchronization) after a reconnect. No separate event is dispatched — re-read it when handling these events.
 
 
 ## Participants

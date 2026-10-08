@@ -11,7 +11,8 @@ import Foundation
 internal protocol RealtimeObserver: AnyObject {
 
     /// `cursor` is the updates cursor carried by the frame, if any.
-    func onMessage(_ message: MessageDto, cursor: String?)
+    /// `unreadCount` is the current user's unread count in the dialog, if sent by the server.
+    func onMessage(_ message: MessageDto, unreadCount: Int?, cursor: String?)
     func onTyping(_ event: TypingEventDto)
     func onMessageReaction(_ event: MessageReactionEventDto, cursor: String?)
     func onMessageDeleted(_ event: MessageDeletedEventDto, cursor: String?)

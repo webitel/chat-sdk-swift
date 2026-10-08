@@ -48,6 +48,8 @@ enum ChatEvent {
 }
 ```
 
+The SDK updates the cached `Dialog` state (`lastMessage`, `unreadCount`, `participantStates`) **before** dispatching any event for that dialog. There are no separate "dialog changed" events — on any event, re-read the dialog's properties to refresh its UI.
+
 
 ## Event types
 
@@ -89,6 +91,14 @@ struct MessageDeletion {
 }
 ```
 The dialog's cached `lastMessage` is cleared automatically if the deleted message was the last one.
+
+`.received` also updates `Dialog.unreadCount`: the server's `unread_count` is used when the event carries it; otherwise an incoming message newer than the current user's read horizon increments the count. Outgoing messages, including ones sent from another device, are not counted. Any drift is corrected by the next read receipt for the current user (even a duplicate one) or by a [synchronization](#synchronization).
+
+```swift
+case .message(.received(let dialogId, _)):
+    guard let dialog = dialogs[dialogId] else { return }
+    reloadRow(dialog) // lastMessage and unreadCount are already up to date
+```
 
 See [Reactions](reactions.md) for details on `.reactionsChanged`.
 
@@ -141,7 +151,8 @@ enum ReceiptEvent {
     case read(
         dialogId: String,
         member: Participant,
-        upToSequence: Int64
+        upToSequence: Int64,
+        unreadCount: Int?
     )
 
     case deliveryFailed(
@@ -155,6 +166,8 @@ Receipts are cumulative horizons: `.read(upToSequence: 108)` means every message
 
 The SDK first advances `Dialog.participantStates`, then dispatches the event — only when the horizon actually moved forward. Duplicate or stale receipts are dropped, so a horizon never goes back. `read` and `delivered` are tracked independently.
 
+`.read` carries `unreadCount` — the current user's unread count after the receipt. It is set only when `member` is the current user (e.g. after `markAsRead` or reading on another device); for receipts from other participants it is `nil`. The SDK updates `Dialog.unreadCount` before dispatching the event, so both always match. A duplicate read receipt for the current user is not dispatched, but its `unreadCount` is still applied to `Dialog.unreadCount`.
+
 ```swift
 struct ParticipantState {
     let member: Participant
@@ -166,8 +179,12 @@ struct ParticipantState {
 The same `participantStates` are loaded with the dialog and refreshed after a reconnect (see [Synchronization](#synchronization)), so the dialog always holds the current state regardless of the source:
 
 ```swift
-case .receipt(.read(let dialogId, let member, let upToSequence)):
+case .receipt(.read(let dialogId, let member, let upToSequence, let unreadCount)):
     markRead(dialogId: dialogId, memberId: member.id, upTo: upToSequence)
+
+    if let unreadCount {
+        setUnreadBadge(dialogId: dialogId, count: unreadCount)
+    }
 ```
 
 `.deliveryFailed` is reserved for future use — not yet emitted by the server.
@@ -194,7 +211,7 @@ struct DialogSyncChanges {
 }
 ```
 
-The dialog's cached `lastMessage` and `participantStates` are updated automatically. Recovered horizons are merged with the ones received in realtime and never move back.
+The dialog's cached `lastMessage`, `unreadCount` and `participantStates` are updated automatically. Recovered horizons are merged with the ones received in realtime and never move back.
 
 Dialogs created while offline are announced first, so they are handled by the same code as realtime `.created`:
 
