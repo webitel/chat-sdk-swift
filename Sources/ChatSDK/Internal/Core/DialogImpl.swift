@@ -29,7 +29,6 @@ internal final class DialogImpl: Dialog {
     var lastMessage: Message? { withState { $0.lastMessage } }
     var unreadCount: Int { withState { $0.unreadCount } }
     var participantStates: [ParticipantState] { withState { $0.participantStates } }
-    var deliveryExceptions: [DeliveryException] { withState { $0.deliveryExceptions } }
 
     init(
         state: DialogState,
@@ -363,6 +362,16 @@ internal final class DialogImpl: Dialog {
     }
 
 
+    /// Adds or replaces the member's failure on the last message, if it is the failed one.
+    func applyDeliveryFailure(_ exception: DeliveryException) {
+        withState { state in
+            guard state.lastMessage?.id == exception.messageId else { return }
+            state.lastMessage?.deliveryExceptions.removeAll { $0.member.id == exception.member.id }
+            state.lastMessage?.deliveryExceptions.append(exception)
+        }
+    }
+
+
     func applyDeletion(messageId: String) {
         withState { state in
             guard state.lastMessage?.id == messageId else { return }
@@ -401,6 +410,9 @@ internal final class DialogImpl: Dialog {
             var merged = message
             if merged.reactions.isEmpty {
                 merged.reactions = state.lastMessage?.reactions ?? []
+            }
+            if merged.deliveryExceptions.isEmpty {
+                merged.deliveryExceptions = state.lastMessage?.deliveryExceptions ?? []
             }
 
             state.lastMessage = merged

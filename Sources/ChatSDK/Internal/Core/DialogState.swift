@@ -17,7 +17,6 @@ internal struct DialogState {
     var lastMessage: Message?
     var unreadCount: Int = 0
     var participantStates: [ParticipantState] = []
-    var deliveryExceptions: [DeliveryException] = []
 }
 
 

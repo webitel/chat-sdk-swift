@@ -49,6 +49,11 @@ public struct Message: Hashable, Codable {
     /// `ReceiptEvent` sequences to resolve delivery/read state.
     public let sequence: Int64?
 
+    /// Members this message failed to be delivered to, empty if no failures are known.
+    ///
+    /// Updated in place on `ReceiptEvent.deliveryFailed`.
+    public var deliveryExceptions: [DeliveryException]
+
     public init(
         id: String,
         dialogId: String,
@@ -61,7 +66,8 @@ public struct Message: Hashable, Codable {
         reactions: [MessageReaction],
         reply: MessageReply? = nil,
         forwardOrigin: ForwardOrigin? = nil,
-        sequence: Int64? = nil
+        sequence: Int64? = nil,
+        deliveryExceptions: [DeliveryException] = []
     ) {
         self.id = id
         self.dialogId = dialogId
@@ -75,6 +81,7 @@ public struct Message: Hashable, Codable {
         self.reply = reply
         self.forwardOrigin = forwardOrigin
         self.sequence = sequence
+        self.deliveryExceptions = deliveryExceptions
     }
 }
 

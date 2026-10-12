@@ -30,9 +30,6 @@ public protocol Dialog: Hashable {
     /// Current delivery/read horizons for dialog participants.
     var participantStates: [ParticipantState] { get }
 
-    /// Current known delivery failures.
-    var deliveryExceptions: [DeliveryException] { get }
-
     /// Sends a message.
     ///
     /// - Note: Does not require an active realtime connection.

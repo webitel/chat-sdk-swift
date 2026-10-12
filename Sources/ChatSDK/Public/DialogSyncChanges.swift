@@ -27,9 +27,6 @@ public struct DialogSyncChanges {
     /// Current delivery/read horizons for affected participants.
     public let participantStates: [ParticipantState]
 
-    /// Delivery failures that should be applied to local state.
-    public let deliveryExceptions: [DeliveryException]
-
     /// Members added or removed while the client was out of sync.
     public let memberChanges: [MemberChange]
 
@@ -49,21 +46,6 @@ public struct ParticipantState {
     /// Highest message sequence known to be read
     /// by this participant.
     public let readUpToSequence: Int64
-}
-
-
-public struct DeliveryException {
-
-    public let messageId: String
-    public let member: Participant
-    public let error: DeliveryError
-}
-
-
-public struct DeliveryError {
-
-    public let code: String
-    public let message: String?
 }
 
 

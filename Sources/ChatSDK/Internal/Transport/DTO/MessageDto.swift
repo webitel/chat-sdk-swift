@@ -45,6 +45,7 @@ internal struct MessageDto: Decodable {
     let replyTo: MessageReplyDto?
     let forwardOrigin: ForwardOriginDto?
     let sequence: Int64?
+    let failures: [DeliveryFailureDto]
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -61,6 +62,7 @@ internal struct MessageDto: Decodable {
         case replyTo = "reply_to"
         case forwardOrigin = "forward_origin"
         case sequence = "seq"
+        case failures
     }
 
     init(from decoder: Decoder) throws {
@@ -134,6 +136,11 @@ internal struct MessageDto: Decodable {
             forKey: .forwardOrigin
         )
 
+        failures = ((try? container.decodeIfPresent(
+            [LossyDeliveryFailureDto].self,
+            forKey: .failures
+        )) ?? []).compactMap(\.value)
+
         content = try MessageContentDto(from: decoder)
     }
 }
@@ -160,7 +167,8 @@ internal extension MessageDto {
             reactions: (try? reactions.map { try $0.toDomain() }) ?? [],
             reply: replyTo?.toDomain(),
             forwardOrigin: forwardOrigin?.toDomain(),
-            sequence: sequence
+            sequence: sequence,
+            deliveryExceptions: failures.map { $0.toDomain(messageId: id) }
         )
     }
 }

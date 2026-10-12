@@ -175,10 +175,54 @@ public struct Message: Hashable, Codable {
 
     /// Original source if this message was forwarded, nil otherwise
     public let forwardOrigin: ForwardOrigin?
+
+    /// Position of the message within its dialog
+    public let sequence: Int64?
+
+    /// Members this message failed to be delivered to, empty if no failures are known
+    public var deliveryExceptions: [DeliveryException]
 }
 ```
 
-See [Reactions](reactions.md) for details on `reactions`.
+See [Reactions](reactions.md) for details on `reactions` and [Delivery failures](#delivery-failures) for `deliveryExceptions`.
+
+
+## Delivery Failures
+
+A message may fail to reach some dialog members — e.g. an external channel rejects it (Telegram: `403 Forbidden: bot was blocked by the user`). Each failure is described per member:
+
+```swift
+struct DeliveryException {
+    let messageId: String
+    /// Member the message was not delivered to
+    let member: Participant
+    let error: DeliveryError
+}
+
+struct DeliveryError {
+    /// e.g. "403"
+    let code: String
+    let message: String?
+}
+```
+
+Failures are part of the message itself (`failures` on the server) and arrive through every channel:
+
+| Source | How the client applies it |
+|---|---|
+| History (`getHistory`) | `Message.deliveryExceptions` is already filled |
+| Sync after reconnect (`DialogEvent.synchronized`) | `changes.messages` carry the whole updated message — upsert by `id` |
+| Realtime (`ReceiptEvent.deliveryFailed`) | Find the message by `exception.messageId` and add / replace the failure for `exception.member` |
+
+```swift
+case .receipt(.deliveryFailed(let dialogId, let exception)):
+    updateMessage(dialogId: dialogId, id: exception.messageId) { message in
+        message.deliveryExceptions.removeAll { $0.member.id == exception.member.id }
+        message.deliveryExceptions.append(exception)
+    }
+```
+
+Dialogs do not keep a separate list of failures; the SDK only patches the cached `Dialog.lastMessage` when it is the failed message.
 
 
 ## Replying to a Message

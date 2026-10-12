@@ -187,7 +187,7 @@ case .receipt(.read(let dialogId, let member, let upToSequence, let unreadCount)
     }
 ```
 
-`.deliveryFailed` is reserved for future use — not yet emitted by the server.
+`.deliveryFailed` is emitted when a message could not be delivered to a member (e.g. the external channel rejected it). Unlike receipts it refers to a single message, not a horizon. Apply it to the message with `exception.messageId` — see [Delivery failures](messages.md#delivery-failures). Repeated failures for the same member replace the previous one. If the failed message is `Dialog.lastMessage`, the SDK updates its `deliveryExceptions` before dispatching the event.
 
 
 ## Synchronization
@@ -204,12 +204,13 @@ struct DialogSyncChanges {
     /// Current delivery/read horizons; compare with `Message.sequence`.
     /// Same merged values as `Dialog.participantStates`.
     let participantStates: [ParticipantState]
-    let deliveryExceptions: [DeliveryException]
     let memberChanges: [MemberChange]
     /// The current user has left the dialog.
     let hasLeft: Bool
 }
 ```
+
+Delivery failures come inside `messages` (`Message.deliveryExceptions`) — upserting the message applies them.
 
 The dialog's cached `lastMessage`, `unreadCount` and `participantStates` are updated automatically. Recovered horizons are merged with the ones received in realtime and never move back.
 

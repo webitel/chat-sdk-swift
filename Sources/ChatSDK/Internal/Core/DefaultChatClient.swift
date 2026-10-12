@@ -935,9 +935,19 @@ extension DefaultChatClient: RealtimeObserver {
         synchronizer.submit(cursor: cursor) { [weak self] in
             guard let self else { return }
 
-            // TODO: map failed delivery statuses to `ReceiptEvent.deliveryFailed`
-            guard let kind = dto.receiptKind else {
-                self.logger.warning("Unsupported message status: \(dto.status)")
+            if let exception = dto.deliveryException {
+                self.dialogFactory.get(dto.dialogId)?.applyDeliveryFailure(exception)
+
+                self.hub.dispatch(
+                    ChatEvent.receipt(
+                        ReceiptEvent.deliveryFailed(dialogId: dto.dialogId, exception: exception)
+                    )
+                )
+                return
+            }
+
+            guard let kind = dto.receiptKind, let upToSeq = dto.upToSeq else {
+                self.logger.warning("Unsupported or incomplete message status: \(dto.status)")
                 return
             }
 
@@ -948,7 +958,7 @@ extension DefaultChatClient: RealtimeObserver {
                 .applyReceipt(
                     member: member,
                     kind: kind,
-                    upToSequence: dto.upToSeq,
+                    upToSequence: upToSeq,
                     unreadCount: dto.unreadCount
                 ) ?? true
 
@@ -958,12 +968,12 @@ extension DefaultChatClient: RealtimeObserver {
 
             switch kind {
             case .delivered:
-                event = .delivered(dialogId: dto.dialogId, member: member, upToSequence: dto.upToSeq)
+                event = .delivered(dialogId: dto.dialogId, member: member, upToSequence: upToSeq)
             case .read:
                 event = .read(
                     dialogId: dto.dialogId,
                     member: member,
-                    upToSequence: dto.upToSeq,
+                    upToSequence: upToSeq,
                     unreadCount: dto.unreadCount
                 )
             }
@@ -1202,8 +1212,6 @@ extension DefaultChatClient: UpdatesSynchronizerDelegate {
                 messages: messages,
                 deletedMessageIds: thread.deletedMessageIds,
                 participantStates: participantStates,
-                // TODO: map once the server exposes delivery failures in updates
-                deliveryExceptions: [],
                 memberChanges: memberChanges,
                 hasLeft: thread.left
             )

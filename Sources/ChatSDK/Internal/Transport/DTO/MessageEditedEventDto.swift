@@ -18,6 +18,8 @@ internal struct MessageEditedEventDto: Decodable {
     let reactions: [MessageReactionDto]
     let replyTo: MessageReplyDto?
     let forwardOrigin: ForwardOriginDto?
+    let sequence: Int64?
+    let failures: [DeliveryFailureDto]
 
     private enum CodingKeys: String, CodingKey {
         case messageId = "id"
@@ -29,6 +31,8 @@ internal struct MessageEditedEventDto: Decodable {
         case reactions
         case replyTo = "reply_to"
         case forwardOrigin = "forward_origin"
+        case sequence = "seq"
+        case failures
     }
 
     init(from decoder: Decoder) throws {
@@ -54,6 +58,13 @@ internal struct MessageEditedEventDto: Decodable {
             ForwardOriginDto.self,
             forKey: .forwardOrigin
         )
+
+        sequence = decodeFlexibleInt64(container, key: .sequence)
+
+        failures = ((try? container.decodeIfPresent(
+            [LossyDeliveryFailureDto].self,
+            forKey: .failures
+        )) ?? []).compactMap(\.value)
     }
 
     private static func decodeTimestamp(
@@ -94,7 +105,9 @@ internal extension MessageEditedEventDto {
             isOutgoing: currentUserId == from.contact.id.sub,
             reactions: (try? reactions.map { try $0.toDomain() }) ?? [],
             reply: replyTo?.toDomain(),
-            forwardOrigin: forwardOrigin?.toDomain()
+            forwardOrigin: forwardOrigin?.toDomain(),
+            sequence: sequence,
+            deliveryExceptions: failures.map { $0.toDomain(messageId: messageId) }
         )
     }
 }
