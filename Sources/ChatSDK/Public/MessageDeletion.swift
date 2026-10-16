@@ -8,8 +8,17 @@
 import Foundation
 
 
-public struct MessageDeletion {
-    public let messageId: String
+/// Who deleted a message and when.
+public struct MessageDeletion: Hashable, Codable {
+
+    /// Participant who deleted the message.
     public let deletedBy: Participant
+
+    /// Deletion timestamp.
     public let deletedAt: Date
+
+    public init(deletedBy: Participant, deletedAt: Date) {
+        self.deletedBy = deletedBy
+        self.deletedAt = deletedAt
+    }
 }

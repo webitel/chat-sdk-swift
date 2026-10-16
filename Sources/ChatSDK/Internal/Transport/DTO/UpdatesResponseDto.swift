@@ -44,7 +44,7 @@ internal struct ThreadUpdatesDto: Decodable {
     let unreadCount: Int?
     let messages: [MessageDto]
     let topMessage: MessageDto?
-    let deletedMessageIds: [String]
+    let deletedMessages: [DeletedMessageDto]
     let readStates: [ReadStateDto]
     let memberChanges: [MemberChangeDto]
     let left: Bool
@@ -54,7 +54,7 @@ internal struct ThreadUpdatesDto: Decodable {
         case threadId = "thread_id"
         case unreadCount = "unread_count"
         case topMessage = "top_message"
-        case deletedMessageIds = "deleted_message_ids"
+        case deletedMessages = "deleted_messages"
         case readStates = "read_states"
         case memberChanges = "member_changes"
     }
@@ -81,7 +81,7 @@ internal struct ThreadUpdatesDto: Decodable {
             topMessage = nil
         }
 
-        deletedMessageIds = (try? container.decodeIfPresent([String].self, forKey: .deletedMessageIds)) ?? []
+        deletedMessages = Self.decodeDeletedMessages(container, threadId: threadId)
         readStates = (try? container.decodeIfPresent([ReadStateDto].self, forKey: .readStates)) ?? []
         memberChanges = (try? container.decodeIfPresent([MemberChangeDto].self, forKey: .memberChanges)) ?? []
         left = (try? container.decodeIfPresent(Bool.self, forKey: .left)) ?? false
@@ -114,6 +114,63 @@ internal struct ThreadUpdatesDto: Decodable {
         }
 
         return result
+    }
+
+    /// Undecodable items are skipped, the rest are kept.
+    private static func decodeDeletedMessages(
+        _ container: KeyedDecodingContainer<CodingKeys>,
+        threadId: String
+    ) -> [DeletedMessageDto] {
+
+        guard
+            container.contains(.deletedMessages),
+            var items = try? container.nestedUnkeyedContainer(forKey: .deletedMessages)
+        else {
+            return []
+        }
+
+        var result: [DeletedMessageDto] = []
+
+        while !items.isAtEnd {
+            guard let itemDecoder = try? items.superDecoder() else { break }
+
+            do {
+                result.append(try DeletedMessageDto(from: itemDecoder))
+            } catch {
+                logger.warning("Failed to decode deleted message in thread \(threadId): \(error)")
+            }
+        }
+
+        return result
+    }
+}
+
+
+internal struct DeletedMessageDto: Decodable {
+    let id: String
+    let deletedAt: Int64
+    let deletedBy: ParticipantDto
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case deletedAt = "deleted_at"
+        case deletedBy = "deleted_by"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(String.self, forKey: .id)
+        deletedBy = try container.decode(ParticipantDto.self, forKey: .deletedBy)
+
+        guard let deletedAt = decodeFlexibleInt64(container, key: .deletedAt) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .deletedAt,
+                in: container,
+                debugDescription: "Invalid timestamp format"
+            )
+        }
+        self.deletedAt = deletedAt
     }
 }
 
@@ -179,6 +236,16 @@ internal extension ReadStateDto {
             member: participant,
             deliveredUpToSequence: deliveredUpToSeq,
             readUpToSequence: readUpToSeq
+        )
+    }
+}
+
+
+internal extension DeletedMessageDto {
+    func toDomain() -> MessageDeletion {
+        MessageDeletion(
+            deletedBy: deletedBy.toDomain(),
+            deletedAt: Date(timeIntervalSince1970: Double(deletedAt) / 1000.0)
         )
     }
 }

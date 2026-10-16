@@ -69,6 +69,7 @@ enum MessageEvent {
 
     case deleted(
         dialogId: String,
+        messageId: String,
         deletion: MessageDeletion
     )
 
@@ -80,17 +81,21 @@ enum MessageEvent {
 }
 ```
 
-`.edited` is dispatched whenever a message is edited — since only the message's author may edit it, `message.from` and `message.isOutgoing` reflect the editor. The dialog's cached `lastMessage` is updated automatically (in place, preserving its existing reactions and reply) if the edited message was the last one.
+`.edited` is dispatched whenever a message is edited. `message` is the full updated message, decoded the same way as one from `getHistory` (text, attachments, keyboard, reply, forward origin, deletion); since only the message's author may edit it, `message.from` and `message.isOutgoing` reflect the editor. The dialog's cached `lastMessage` is updated automatically (in place, preserving its existing reactions and reply) if the edited message was the last one.
 
 `.deleted` is dispatched whenever a message is deleted — including deletions made by another participant — carrying who deleted it and when:
 ```swift
 struct MessageDeletion {
-    let messageId: String
     let deletedBy: Participant
     let deletedAt: Date
 }
 ```
-The dialog's cached `lastMessage` is cleared automatically if the deleted message was the last one.
+Deleted messages are not removed from the history — they come back from `getHistory` with `Message.deletion` set (`Message.isDeleted == true`). If the message is cached locally, the deletion can be applied to it:
+```swift
+case .message(.deleted(let dialogId, let messageId, let deletion)):
+    messages[dialogId]?[messageId]?.deletion = deletion
+```
+The dialog's cached `lastMessage` is marked as deleted automatically if the deleted message was the last one.
 
 `.received` also updates `Dialog.unreadCount`: the server's `unread_count` is used when the event carries it; otherwise an incoming message newer than the current user's read horizon increments the count. Outgoing messages, including ones sent from another device, are not counted. Any drift is corrected by the next read receipt for the current user (even a duplicate one) or by a [synchronization](#synchronization).
 
@@ -199,8 +204,9 @@ struct DialogSyncChanges {
     let unreadCount: Int
     /// Changed messages, sorted by `sequence`. Upsert by `id`.
     let messages: [Message]
-    /// Messages to remove from local state.
-    let deletedMessageIds: [String]
+    /// Who deleted each message and when, keyed by message id.
+    /// Apply it to the messages you have locally.
+    let deletedMessages: [String: MessageDeletion]
     /// Current delivery/read horizons; compare with `Message.sequence`.
     /// Same merged values as `Dialog.participantStates`.
     let participantStates: [ParticipantState]
@@ -212,7 +218,7 @@ struct DialogSyncChanges {
 
 Delivery failures come inside `messages` (`Message.deliveryExceptions`) — upserting the message applies them.
 
-The dialog's cached `lastMessage`, `unreadCount` and `participantStates` are updated automatically. Recovered horizons are merged with the ones received in realtime and never move back.
+The dialog's cached `lastMessage`, `unreadCount` and `participantStates` are updated automatically. A deleted `lastMessage` stays in place, marked as deleted, as on `MessageEvent.deleted` — until a newer message arrives. Recovered horizons are merged with the ones received in realtime and never move back.
 
 Dialogs created while offline are announced first, so they are handled by the same code as realtime `.created`:
 

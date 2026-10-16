@@ -46,6 +46,9 @@ internal struct MessageDto: Decodable {
     let forwardOrigin: ForwardOriginDto?
     let sequence: Int64?
     let failures: [DeliveryFailureDto]
+    let isDeleted: Bool
+    let deletedAt: Int64?
+    let deletedBy: ParticipantDto?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -63,6 +66,9 @@ internal struct MessageDto: Decodable {
         case forwardOrigin = "forward_origin"
         case sequence = "seq"
         case failures
+        case isDeleted = "deleted"
+        case deletedAt = "deleted_at"
+        case deletedBy = "deleted_by"
     }
 
     init(from decoder: Decoder) throws {
@@ -71,7 +77,10 @@ internal struct MessageDto: Decodable {
 
     /// Decodes a message whose payload may omit `thread_id`
     /// (e.g. messages nested inside an updates thread).
-    init(from decoder: Decoder, fallbackDialogId: String?) throws {
+    ///
+    /// When `sender` is given it is used instead of the payload's `sender`
+    /// (e.g. `edited_by` of an edited message event).
+    init(from decoder: Decoder, fallbackDialogId: String?, sender: ParticipantDto? = nil) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
 
@@ -106,17 +115,21 @@ internal struct MessageDto: Decodable {
             key: .sequence
         )
 
-        do {
-            from = try container.decode(
-                ParticipantDto.self,
-                forKey: .from
-            )
-        } catch {
-            Self.logger.warning("Sender not found for message \(id): \(error)")
-            from = nil
+        if let sender {
+            from = sender
+        } else {
+            do {
+                from = try container.decode(
+                    ParticipantDto.self,
+                    forKey: .from
+                )
+            } catch {
+                Self.logger.warning("Sender not found for message \(id): \(error)")
+                from = nil
+            }
         }
 
-        sendId = try container.decodeIfPresent(
+        sendId = try? container.decodeIfPresent(
             String.self,
             forKey: .sendId
         )
@@ -141,6 +154,21 @@ internal struct MessageDto: Decodable {
             forKey: .failures
         )) ?? []).compactMap(\.value)
 
+        isDeleted = (try? container.decodeIfPresent(
+            Bool.self,
+            forKey: .isDeleted
+        )) ?? false
+
+        deletedAt = try? decodeTimestamp(
+            container,
+            key: .deletedAt
+        )
+
+        deletedBy = try? container.decodeIfPresent(
+            ParticipantDto.self,
+            forKey: .deletedBy
+        )
+
         content = try MessageContentDto(from: decoder)
     }
 }
@@ -152,9 +180,24 @@ internal extension MessageDto {
             return nil
         }
 
+        return toDomain(currentUserId, from: from)
+    }
+
+
+    /// Same as `toDomain(_:)`, but with the sender provided by the caller.
+    func toDomain(_ currentUserId: String?, from: Participant) -> Message {
         let createdDate = Date(timeIntervalSince1970: Double(createdAt) / 1000.0)
         let editedDate = editedAt.map { Date(timeIntervalSince1970: Double($0) / 1000.0) }
-        
+
+        // Deleted messages stay in the history; fall back to the sender
+        // and the last change time if the server omits deletion details
+        let deletion = isDeleted ? MessageDeletion(
+            deletedBy: deletedBy?.toDomain() ?? from,
+            deletedAt: deletedAt.map { Date(timeIntervalSince1970: Double($0) / 1000.0) }
+                ?? editedDate
+                ?? createdDate
+        ) : nil
+
         return Message(
             id: id,
             dialogId: dialogId,
@@ -168,7 +211,8 @@ internal extension MessageDto {
             reply: replyTo?.toDomain(),
             forwardOrigin: forwardOrigin?.toDomain(),
             sequence: sequence,
-            deliveryExceptions: failures.map { $0.toDomain(messageId: id) }
+            deliveryExceptions: failures.map { $0.toDomain(messageId: id) },
+            deletion: deletion
         )
     }
 }

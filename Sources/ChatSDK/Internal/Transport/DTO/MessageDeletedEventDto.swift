@@ -55,7 +55,6 @@ internal struct MessageDeletedEventDto: Decodable {
 internal extension MessageDeletedEventDto {
     func toDomain() -> MessageDeletion {
         MessageDeletion(
-            messageId: messageId,
             deletedBy: deletedBy.toDomain(),
             deletedAt: Date(timeIntervalSince1970: Double(deletedAt) / 1000.0)
         )

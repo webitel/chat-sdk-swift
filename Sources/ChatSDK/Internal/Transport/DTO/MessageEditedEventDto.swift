@@ -8,106 +8,29 @@
 import Foundation
 
 
+/// Carries the full edited message, decoded the same way as a regular one.
+/// `edited_by` becomes the message sender.
 internal struct MessageEditedEventDto: Decodable {
-    let messageId: String
-    let dialogId: String
+    let message: MessageDto
     let editedBy: ParticipantDto
-    let body: String
-    let createdAt: Int64
-    let editedAt: Int64
-    let reactions: [MessageReactionDto]
-    let replyTo: MessageReplyDto?
-    let forwardOrigin: ForwardOriginDto?
-    let sequence: Int64?
-    let failures: [DeliveryFailureDto]
+
+    var messageId: String { message.id }
+    var dialogId: String { message.dialogId }
 
     private enum CodingKeys: String, CodingKey {
-        case messageId = "id"
-        case dialogId = "thread_id"
         case editedBy = "edited_by"
-        case body
-        case createdAt = "created_at"
-        case editedAt = "edited_at"
-        case reactions
-        case replyTo = "reply_to"
-        case forwardOrigin = "forward_origin"
-        case sequence = "seq"
-        case failures
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        messageId = try container.decode(String.self, forKey: .messageId)
-        dialogId = try container.decode(String.self, forKey: .dialogId)
         editedBy = try container.decode(ParticipantDto.self, forKey: .editedBy)
-        body = try container.decode(String.self, forKey: .body)
-        createdAt = try Self.decodeTimestamp(container, key: .createdAt)
-        editedAt = try Self.decodeTimestamp(container, key: .editedAt)
-
-        reactions = (try? container.decodeIfPresent(
-            [MessageReactionDto].self,
-            forKey: .reactions
-        )) ?? []
-
-        replyTo = try? container.decodeIfPresent(
-            MessageReplyDto.self,
-            forKey: .replyTo
-        )
-
-        forwardOrigin = try? container.decodeIfPresent(
-            ForwardOriginDto.self,
-            forKey: .forwardOrigin
-        )
-
-        sequence = decodeFlexibleInt64(container, key: .sequence)
-
-        failures = ((try? container.decodeIfPresent(
-            [LossyDeliveryFailureDto].self,
-            forKey: .failures
-        )) ?? []).compactMap(\.value)
-    }
-
-    private static func decodeTimestamp(
-        _ container: KeyedDecodingContainer<CodingKeys>,
-        key: CodingKeys
-    ) throws -> Int64 {
-
-        if let intValue = try? container.decode(Int64.self, forKey: key) {
-            return intValue
-        }
-
-        if let stringValue = try? container.decode(String.self, forKey: key),
-           let intValue = Int64(stringValue) {
-            return intValue
-        }
-
-        throw DecodingError.dataCorruptedError(
-            forKey: key,
-            in: container,
-            debugDescription: "Invalid timestamp format"
-        )
+        message = try MessageDto(from: decoder, fallbackDialogId: nil, sender: editedBy)
     }
 }
 
 
 internal extension MessageEditedEventDto {
     func toDomain(_ currentUserId: String?) -> Message {
-        let from = editedBy.toDomain()
-
-        return Message(
-            id: messageId,
-            dialogId: dialogId,
-            createdAt: Date(timeIntervalSince1970: Double(createdAt) / 1000.0),
-            editedAt: Date(timeIntervalSince1970: Double(editedAt) / 1000.0),
-            from: from,
-            content: .text(body),
-            sendId: nil,
-            isOutgoing: currentUserId == from.contact.id.sub,
-            reactions: (try? reactions.map { try $0.toDomain() }) ?? [],
-            reply: replyTo?.toDomain(),
-            forwardOrigin: forwardOrigin?.toDomain(),
-            sequence: sequence,
-            deliveryExceptions: failures.map { $0.toDomain(messageId: messageId) }
-        )
+        message.toDomain(currentUserId, from: editedBy.toDomain())
     }
 }

@@ -54,6 +54,11 @@ public struct Message: Hashable, Codable {
     /// Updated in place on `ReceiptEvent.deliveryFailed`.
     public var deliveryExceptions: [DeliveryException]
 
+    /// Who deleted the message and when, nil if the message is not deleted.
+    ///
+    /// Deleted messages stay in the history. Updated in place on `MessageEvent.deleted`.
+    public var deletion: MessageDeletion?
+
     public init(
         id: String,
         dialogId: String,
@@ -67,7 +72,8 @@ public struct Message: Hashable, Codable {
         reply: MessageReply? = nil,
         forwardOrigin: ForwardOrigin? = nil,
         sequence: Int64? = nil,
-        deliveryExceptions: [DeliveryException] = []
+        deliveryExceptions: [DeliveryException] = [],
+        deletion: MessageDeletion? = nil
     ) {
         self.id = id
         self.dialogId = dialogId
@@ -82,14 +88,22 @@ public struct Message: Hashable, Codable {
         self.forwardOrigin = forwardOrigin
         self.sequence = sequence
         self.deliveryExceptions = deliveryExceptions
+        self.deletion = deletion
     }
 }
 
 
 public extension Message {
     /// Indicates whether the message was edited after creation.
+    ///
+    /// Always false for deleted messages, since deletion also bumps `editedAt`.
     var isEdited: Bool {
-        guard let editedAt else { return false }
+        guard !isDeleted, let editedAt else { return false }
         return editedAt > createdAt
+    }
+
+    /// Indicates whether the message was deleted.
+    var isDeleted: Bool {
+        deletion != nil
     }
 }

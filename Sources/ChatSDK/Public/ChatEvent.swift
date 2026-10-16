@@ -49,6 +49,7 @@ public enum MessageEvent {
 
     case deleted(
         dialogId: String,
+        messageId: String,
         deletion: MessageDeletion
     )
     
@@ -62,7 +63,7 @@ public enum MessageEvent {
         switch self {
         case .received(let id, _),
              .edited(let id, _),
-             .deleted(let id, _),
+             .deleted(let id, _, _),
              .reactionsChanged(let id, _, _):
             return id
         }

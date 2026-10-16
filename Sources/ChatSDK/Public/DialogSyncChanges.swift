@@ -21,8 +21,11 @@ public struct DialogSyncChanges {
     /// Messages should be upserted by `id`.
     public let messages: [Message]
 
-    /// Messages that should be removed from local state.
-    public let deletedMessageIds: [String]
+    /// Messages deleted while the client was out of sync: who deleted each one
+    /// and when, keyed by message id.
+    ///
+    /// Apply it to the messages you have locally, e.g. by setting `Message.deletion`.
+    public let deletedMessages: [String: MessageDeletion]
 
     /// Current delivery/read horizons for affected participants.
     public let participantStates: [ParticipantState]

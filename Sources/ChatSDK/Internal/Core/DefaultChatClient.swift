@@ -904,11 +904,15 @@ extension DefaultChatClient: RealtimeObserver {
 
             let deletion = dto.toDomain()
 
-            self.dialogFactory.get(dto.dialogId)?.applyDeletion(messageId: dto.messageId)
+            self.dialogFactory.get(dto.dialogId)?.applyDeletion(messageId: dto.messageId, deletion: deletion)
 
             self.hub.dispatch(
                 ChatEvent.message(
-                    MessageEvent.deleted(dialogId: dto.dialogId, deletion: deletion)
+                    MessageEvent.deleted(
+                        dialogId: dto.dialogId,
+                        messageId: dto.messageId,
+                        deletion: deletion
+                    )
                 )
             )
         }
@@ -1170,6 +1174,12 @@ extension DefaultChatClient: UpdatesSynchronizerDelegate {
 
             let memberChanges = thread.memberChanges.compactMap { $0.toDomain() }
 
+            let deletedMessages = Dictionary(
+                thread.deletedMessages.map { ($0.id, $0.toDomain()) },
+                // A repeated id must not crash, the later entry wins
+                uniquingKeysWith: { _, last in last }
+            )
+
             let dialog: DialogImpl?
 
             if let dto = thread.dialog {
@@ -1192,7 +1202,7 @@ extension DefaultChatClient: UpdatesSynchronizerDelegate {
                 dialog = self.dialogFactory.get(thread.threadId)
                 dialog?.applySync(
                     lastMessage: thread.topMessage?.toDomain(currentUserId) ?? messages.last,
-                    deletedMessageIds: thread.deletedMessageIds,
+                    deletedMessages: deletedMessages,
                     unreadCount: thread.unreadCount
                 )
 
@@ -1210,7 +1220,7 @@ extension DefaultChatClient: UpdatesSynchronizerDelegate {
                 // Same value the dialog now holds
                 unreadCount: dialog?.unreadCount ?? thread.unreadCount ?? 0,
                 messages: messages,
-                deletedMessageIds: thread.deletedMessageIds,
+                deletedMessages: deletedMessages,
                 participantStates: participantStates,
                 memberChanges: memberChanges,
                 hasLeft: thread.left

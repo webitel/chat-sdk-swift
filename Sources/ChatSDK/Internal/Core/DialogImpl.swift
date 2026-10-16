@@ -372,29 +372,42 @@ internal final class DialogImpl: Dialog {
     }
 
 
-    func applyDeletion(messageId: String) {
+    func applyDeletion(messageId: String, deletion: MessageDeletion) {
         withState { state in
             guard state.lastMessage?.id == messageId else { return }
-            state.lastMessage = nil
+            state.lastMessage?.deletion = deletion
         }
     }
 
 
-    func applySync(lastMessage: Message?, deletedMessageIds: [String], unreadCount: Int?) {
+    func applySync(lastMessage: Message?, deletedMessages: [String: MessageDeletion], unreadCount: Int?) {
         withState { state in
             if let unreadCount {
                 state.unreadCount = unreadCount
             }
 
-            if let id = state.lastMessage?.id, deletedMessageIds.contains(id) {
-                state.lastMessage = nil
+            // Kept in place and marked, as on `MessageEvent.deleted`. An older
+            // top message (the previous active one) does not replace it below
+            if let id = state.lastMessage?.id, let deletion = deletedMessages[id] {
+                state.lastMessage?.deletion = deletion
             }
 
-            guard let lastMessage, !deletedMessageIds.contains(lastMessage.id)
-            else { return }
+            guard var lastMessage else { return }
 
-            if let current = state.lastMessage, current.createdAt > lastMessage.createdAt {
-                return
+            // A top message listed as deleted is marked even without the flag
+            if lastMessage.deletion == nil {
+                lastMessage.deletion = deletedMessages[lastMessage.id]
+            }
+
+            if let current = state.lastMessage {
+                if current.createdAt > lastMessage.createdAt {
+                    return
+                }
+
+                // A stale copy of the same message must not undo a known deletion
+                if current.id == lastMessage.id, lastMessage.deletion == nil {
+                    lastMessage.deletion = current.deletion
+                }
             }
 
             state.lastMessage = lastMessage
@@ -413,6 +426,9 @@ internal final class DialogImpl: Dialog {
             }
             if merged.deliveryExceptions.isEmpty {
                 merged.deliveryExceptions = state.lastMessage?.deliveryExceptions ?? []
+            }
+            if merged.deletion == nil {
+                merged.deletion = state.lastMessage?.deletion
             }
 
             state.lastMessage = merged

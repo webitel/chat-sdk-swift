@@ -556,7 +556,9 @@ public enum SkippedMessageReason: String, Hashable, Codable, CaseIterable {
 
 `ids` are not restricted to the dialog `deleteMessages` was called on — the underlying endpoint has no notion of a dialog, so any accessible message id can be passed regardless of which `Dialog` instance you call this on, or whether you call it via `chatClient` instead. This mirrors `setReaction`/`removeReaction`, which are available on both `Dialog` and `ChatClient` the same way. Scoping and authorization are enforced server-side; unauthorized or non-existent ids are reported back via `skipped`.
 
-A realtime `ChatEvent.message(.deleted(dialogId:deletion:))` is dispatched when a message is deleted — including deletions made by another participant — and the dialog's cached `lastMessage` is cleared automatically if it was the deleted message. See [Events](events.md) for details.
+Deletion is soft: deleted messages stay in the history with `Message.deletion` describing who deleted them and when (`Message.isDeleted == true`). Their content is empty, and `isEdited` is always `false` for them.
+
+A realtime `ChatEvent.message(.deleted(dialogId:messageId:deletion:))` is dispatched when a message is deleted — including deletions made by another participant — and the dialog's cached `lastMessage` is marked as deleted automatically if it was the deleted message. See [Events](events.md) for details.
 
 
 ## Forwarding Messages
