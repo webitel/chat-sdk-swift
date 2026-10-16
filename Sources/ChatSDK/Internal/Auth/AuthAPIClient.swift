@@ -191,7 +191,12 @@ final class AuthAPIClient: AuthService {
                 logger.debug("Using token from provider - \(token.maskedToken)")
             headerProvider.updateAccessToken(token)
 
-            try await inspect()
+            do {
+                try await inspect()
+            } catch {
+                headerProvider.updateAccessToken(nil)
+                throw error
+            }
 
             notifyUpdate(token)
         }
