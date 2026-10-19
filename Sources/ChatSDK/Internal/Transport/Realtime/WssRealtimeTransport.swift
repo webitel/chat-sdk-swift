@@ -16,8 +16,13 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     private var socket: URLSessionWebSocketTask?
     
     private weak var observer: RealtimeObserver?
-    private(set) var connectionState: ConnectionState = .disconnected
-    
+    // guarded by syncConnectQueue
+    private var _connectionState: ConnectionState = .disconnected
+
+    var connectionState: ConnectionState {
+        syncConnectQueue.sync { _connectionState }
+    }
+
     private let wssPath = "/im/ws"
     
     private let logger = SDKLogger.make("chat.realtime")
@@ -77,16 +82,33 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
             String(data: $0, encoding: .utf8)
         }
         logger.debug("closed socket with code \(closeCode.rawValue), \(String(describing: reasonText))")
-        socket = nil
-        connectionState = ConnectionState.disconnected
+
+        let isCurrent: Bool = syncConnectQueue.sync {
+            guard webSocketTask === socket else { return false }
+            socket = nil
+            _connectionState = stateForClose(code: closeCode.rawValue, reason: reasonText)
+            return true
+        }
+        guard isCurrent else {
+            logger.debug("ignore close from stale socket")
+            return
+        }
         observer?.onClosed(code: closeCode.rawValue, reason: reasonText ?? "No reason")
     }
-    
-    
+
+
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask,
                     didOpenWithProtocol protocol: String?) {
+        let isCurrent: Bool = syncConnectQueue.sync {
+            guard webSocketTask === socket else { return false }
+            _connectionState = .connected
+            return true
+        }
+        guard isCurrent else {
+            logger.debug("ignore open from stale socket")
+            return
+        }
         logger.debug("WebSocket connected")
-        connectionState = .connected
         observer?.onOpen()
     }
     
@@ -102,12 +124,16 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     
     
     func disconnect() {
-        closeStream(reason: "Client close connect")
+        // client already updates its own state; a late onClosed would race with connect()
+        closeStream(reason: "Client close connect", notify: false)
     }
     
     
     func onAuthUpdated(_ token: String) {
-        if connectionState == .connected {
+        let connectedSocket: URLSessionWebSocketTask? = syncConnectQueue.sync {
+            _connectionState == .connected ? socket : nil
+        }
+        if let connectedSocket {
             logger.debug("send new auth in stream; \(token.maskedToken)")
 
             let payload: [String: Any] = [
@@ -117,7 +143,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
 
             if let data = try? JSONSerialization.data(withJSONObject: payload),
                let jsonString = String(data: data, encoding: .utf8) {
-                socket?.send(.string(jsonString), completionHandler: { error in
+                connectedSocket.send(.string(jsonString), completionHandler: { error in
                     if let error = error {
                         self.logger.error("error send auth: \(error)")
                     }
@@ -127,7 +153,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     }
     
     
-    private func sendAck(eventId: String) {
+    private func sendAck(eventId: String, task: URLSessionWebSocketTask) {
         logger.debug("Send ACK for eventId=\(eventId)")
 
         let payload: [String: Any] = [
@@ -137,7 +163,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
 
         if let data = try? JSONSerialization.data(withJSONObject: payload),
            let jsonString = String(data: data, encoding: .utf8) {
-            socket?.send(.string(jsonString)) { error in
+            task.send(.string(jsonString)) { error in
                 if let error {
                     self.logger.error("Error send ACK: \(error)")
                 }
@@ -147,36 +173,44 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     
     
     private func tryOpenStream() {
-        var shouldStartListening = false
+        var openedSocket: URLSessionWebSocketTask?
+        var buildError: ChatError?
         syncConnectQueue.sync {
-            guard !connectionState.isAlive
+            guard !_connectionState.isAlive
             else {
                 logger.warning(
-                    "stream already active - \(connectionState)"
+                    "stream already active - \(_connectionState)"
                 )
                 
                 return
             }
             
-            connectionState = .connecting
+            _connectionState = .connecting
             
             let request: URLRequest
             
             do {
                 request = try buildWebSocketRequest()
             } catch {
-                observer?.onError(error.asChatError)
+                _connectionState = .failed(error.asChatError)
+                buildError = error.asChatError
                 return
             }
-            
+
             logger.debug("WSS: \(wssPath)")
-            socket = session.webSocketTask(with: request)
-            
-            socket?.resume()
-            shouldStartListening = true
+            let task = session.webSocketTask(with: request)
+            socket = task
+
+            task.resume()
+            openedSocket = task
         }
-        if shouldStartListening {
-            listen()
+        // outside of sync: observer may call connect() synchronously
+        if let buildError {
+            observer?.onError(buildError)
+            return
+        }
+        if let openedSocket {
+            listen(openedSocket)
         }
     }
     
@@ -213,45 +247,87 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     }
     
     
-    private func listen() {
-        socket?.receive { [weak self] result in
+    private func listen(_ task: URLSessionWebSocketTask) {
+        task.receive { [weak self] result in
             guard let self else { return }
             
             switch result {
                     
                 case .success(let message):
+                    let isCurrent = syncConnectQueue.sync { task === self.socket }
+                    guard isCurrent else {
+                        logger.debug("ignore message from stale socket")
+                        return
+                    }
+
                     switch message {
                         case .string(let text):
-                            handleMessage(text)
-                            
+                            handleMessage(text, task: task)
+
                         case .data(let data):
                             if let text =
                                 String(data: data, encoding: .utf8) {
-                                handleMessage(text)
+                                handleMessage(text, task: task)
                             }
                         @unknown default:
                             break
                     }
                     
-                    listen()
-                    
+                    // handleMessage may close the stream (disconnected event)
+                    let stillCurrent = syncConnectQueue.sync { task === self.socket }
+                    if stillCurrent {
+                        listen(task)
+                    }
+
                 case .failure(let error):
-                    onError(error.asChatError)
+                    onError(error.asChatError, task: task)
             }
         }
     }
-    
-    
-    private func onError(_ error: ChatError) {
-        guard socket != nil else { return }
-        self.socket = nil
-        connectionState = .failed(error)
-        observer?.onError(error)
+
+
+    private func onError(_ error: ChatError, task: URLSessionWebSocketTask) {
+        // server close frame may fail receive() before didCloseWith arrives;
+        // keep the close code so auth-related closes (401/1008) are not lost
+        let closeCode = task.closeCode
+        let isClosedByServer = closeCode != .invalid
+        let reason = task.closeReason.flatMap { String(data: $0, encoding: .utf8) }
+
+        // handshake rejected (e.g. 401 on upgrade) - map HTTP status so auth refresh kicks in
+        var error = error
+        if let status = (task.response as? HTTPURLResponse)?.statusCode, status >= 400 {
+            error = ChatError.from(statusCode: status, message: error.localizedDescription)
+        }
+
+        let isCurrent: Bool = syncConnectQueue.sync {
+            guard task === socket else { return false }
+            self.socket = nil
+            _connectionState = isClosedByServer
+                ? stateForClose(code: closeCode.rawValue, reason: reason)
+                : .failed(error)
+            return true
+        }
+        guard isCurrent else { return }
+
+        if isClosedByServer {
+            observer?.onClosed(code: closeCode.rawValue, reason: reason ?? "No reason")
+        } else {
+            observer?.onError(error)
+        }
     }
-    
+
+
+    private func stateForClose(code: Int, reason: String?) -> ConnectionState {
+        if code == URLSessionWebSocketTask.CloseCode.normalClosure.rawValue {
+            return .disconnected
+        }
+        return .failed(ChatError.from(statusCode: code, message: reason ?? "No reason"))
+    }
+
     
     private func handleMessage(
-        _ text: String
+        _ text: String,
+        task: URLSessionWebSocketTask
     ) {
         logger.debug("received \(text)")
         
@@ -282,7 +358,7 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
             case .message:
                 if let eventId = json["id"] as? String,
                     !eventId.isEmpty {
-                    sendAck(eventId: eventId)
+                    sendAck(eventId: eventId, task: task)
                 }
                 
                 handleMessageEvent(payload)
@@ -308,8 +384,13 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     private func handleMessageEvent(
         _ payload: [String: Any]
     ) {
+        guard let body = payload[RealtimeEventType.message.rawValue],
+              JSONSerialization.isValidJSONObject(body) else {
+            logger.warning("message event without body")
+            return
+        }
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.message.rawValue]!)
+            let data = try JSONSerialization.data(withJSONObject: body)
             let dto = try jsonDecoder.decode(MessageDto.self, from: data)
             
             observer?.onMessage(dto)
@@ -323,8 +404,13 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     private func handleDialogCreated(
         _ payload: [String: Any]
     ) {
+        guard let body = payload[RealtimeEventType.dialogCreated.rawValue],
+              JSONSerialization.isValidJSONObject(body) else {
+            logger.warning("new dialog event without body")
+            return
+        }
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.dialogCreated.rawValue]!)
+            let data = try JSONSerialization.data(withJSONObject: body)
             let dto = try jsonDecoder.decode(DialogDto.self, from: data)
             
             observer?.onNewDialog(dto)
@@ -340,11 +426,18 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     
     
     private func handleDisconnected(_ payload: [String: Any]) {
+        guard let body = payload[RealtimeEventType.disconnected.rawValue],
+              JSONSerialization.isValidJSONObject(body) else {
+            logger.warning("disconnect event without body")
+            closeStream()
+            return
+        }
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload[RealtimeEventType.disconnected.rawValue]!)
+            let data = try JSONSerialization.data(withJSONObject: body)
             let dto = try jsonDecoder.decode(DisconnectDto.self, from: data)
             
-            closeStream(code: URLSessionWebSocketTask.CloseCode.init(rawValue: dto.code ?? 1000) ?? .normalClosure, reason: dto.reason)
+            let code = dto.code ?? URLSessionWebSocketTask.CloseCode.normalClosure.rawValue
+            closeStream(code: wireCloseCode(code), reason: dto.reason, notifyCode: code)
             
         } catch {
             logger.warning("Failed to decode Disconnect event: \(error)")
@@ -353,18 +446,46 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
     }
     
     
+    /// Close codes allowed in a close frame (RFC 6455 7.4); others (e.g. HTTP 401) fall back to 1000.
+    private func wireCloseCode(_ code: Int) -> URLSessionWebSocketTask.CloseCode {
+        let isSendable = (1000...1003).contains(code)
+            || (1007...1011).contains(code)
+            || (3000...4999).contains(code)
+        guard isSendable else { return .normalClosure }
+        return URLSessionWebSocketTask.CloseCode(rawValue: code) ?? .normalClosure
+    }
+
+
+    /// - Parameter notifyCode: server-provided code reported to the observer
+    ///   (may differ from the wire `code`); nil means a client-initiated close.
+    /// - Parameter notify: whether to report `onClosed` to the observer.
     private func closeStream(
         code: URLSessionWebSocketTask.CloseCode = .normalClosure,
-        reason: String? = nil
+        reason: String? = nil,
+        notifyCode: Int? = nil,
+        notify: Bool = true
     ) {
-        syncConnectQueue.sync {
-            guard let socket else { return }
+        let reportedCode = notifyCode ?? code.rawValue
+        let didClose: Bool = syncConnectQueue.sync {
+            guard let socket else {
+                // no active socket (e.g. after failure) - still reset state
+                _connectionState = .disconnected
+                return false
+            }
             logger.debug("closeStream: code=\(code), reason=\(reason ?? "-")")
-            
+
             let data = reason?.data(using: .utf8)
             socket.cancel(with: code, reason: data)
-            
+
             self.socket = nil
+            _connectionState = notifyCode == nil
+                ? .disconnected
+                : stateForClose(code: reportedCode, reason: reason)
+            return true
+        }
+        // outside of sync: observer may call connect() synchronously
+        if didClose && notify {
+            observer?.onClosed(code: reportedCode, reason: reason ?? "No reason")
         }
     }
     
