@@ -25,7 +25,6 @@ internal class DefaultChatClient: ChatClient {
     
     private let logger = SDKLogger.make("chat.core.client")
     private let queue = DispatchQueue(label: "chat.core.client")
-    private let queueTimer = DispatchQueue.global(qos: .utility)
     
     var connectionState: ConnectionState {
         if isBackoffActive {return .connecting}
@@ -328,6 +327,8 @@ internal class DefaultChatClient: ChatClient {
             backoffWorkItem = nil
             retryAttempt = 0
             realtimeTransport.disconnect()
+            // socket may already be gone (backoff, failure) - onClosed won't fire
+            hub.updateState(.disconnected)
         }
     }
     
@@ -707,6 +708,8 @@ internal class DefaultChatClient: ChatClient {
     private func handleConnectError(_ error: ChatError) {
         queue.async { [weak self] in
             guard let self else { return }
+            // disconnect() may have been called while auth was in progress
+            guard realtimeEnabled else { return }
             failRealtime(error)
         }
     }
@@ -1008,51 +1011,69 @@ extension DefaultChatClient: RealtimeObserver {
     
     
     func onError(_ error: ChatError) {
-        if !self.canRetry(self.retryAttempt) {
-            self.failRealtime(error)
-            return
-        }
-        
-        if case ChatError.unauthorized = error {
-            if context.autoRefreshAuth {
-                self.refreshAuthAndReconnect()
+        queue.async { [weak self] in
+            guard let self else { return }
+            // stale error after disconnect() - nothing to recover
+            guard self.realtimeEnabled else { return }
+
+            if !self.canRetry(self.retryAttempt) {
+                self.failRealtime(error)
                 return
             }
-            self.failRealtime(error)
-            return
+
+            if case ChatError.unauthorized = error {
+                if self.context.autoRefreshAuth {
+                    self.refreshAuthAndReconnect()
+                    return
+                }
+                self.failRealtime(error)
+                return
+            }
+
+            self.tryConnect()
         }
-        
-        self.tryConnect()
     }
     
     
     func onOpen() {
-        self.retryAttempt = 0
-        self.hub.updateState(.connected)
+        queue.async { [weak self] in
+            guard let self else { return }
+            // socket opened by a backoff that raced with disconnect()
+            guard self.realtimeEnabled else {
+                self.realtimeTransport.disconnect()
+                return
+            }
+            self.retryAttempt = 0
+            self.hub.updateState(.connected)
+        }
     }
     
     
     func onClosed(code: Int, reason: String) {
-        if !self.realtimeEnabled {
-            self.hub.updateState(.disconnected)
-            return
-        }
-        
-        if !self.canRetry(self.retryAttempt) {
-            self.closeRealtime(code: code, reason: reason)
-            return
-        }
-        
-        if code == 401 || code == 1008 {
-            if context.autoRefreshAuth {
-                self.refreshAuthAndReconnect()
+        queue.async { [weak self] in
+            guard let self else { return }
+
+            if !self.realtimeEnabled {
+                self.hub.updateState(.disconnected)
                 return
             }
-            self.closeRealtime(code: code, reason: reason)
-            return
+
+            if !self.canRetry(self.retryAttempt) {
+                self.closeRealtime(code: code, reason: reason)
+                return
+            }
+
+            if code == 401 || code == 1008 {
+                if self.context.autoRefreshAuth {
+                    self.refreshAuthAndReconnect()
+                    return
+                }
+                self.closeRealtime(code: code, reason: reason)
+                return
+            }
+
+            self.tryConnect()
         }
-        
-        self.tryConnect()
     }
     
     
@@ -1068,14 +1089,28 @@ extension DefaultChatClient: RealtimeObserver {
     
     
     private func refreshAuthAndReconnect() {
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             do {
                 try await authManager.refresh()
-                if !self.realtimeEnabled { return }
-                
-                self.tryConnect()
+                self.handleAuthRefreshed(nil)
             } catch {
-                failRealtime(error.asChatError)
+                self.handleAuthRefreshed(error.asChatError)
+            }
+        }
+    }
+
+
+    private func handleAuthRefreshed(_ error: ChatError?) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            // disconnect() may have been called while refresh was in progress
+            guard realtimeEnabled else { return }
+
+            if let error {
+                failRealtime(error)
+            } else {
+                tryConnect()
             }
         }
     }
@@ -1148,7 +1183,7 @@ extension DefaultChatClient: RealtimeObserver {
 
         backoffWorkItem = workItem
 
-        queueTimer.asyncAfter(
+        queue.asyncAfter(
             deadline: .now() + delay,
             execute: workItem
         )
