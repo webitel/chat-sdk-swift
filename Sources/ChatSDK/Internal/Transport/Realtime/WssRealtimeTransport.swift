@@ -384,6 +384,9 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
             case .messageStatus:
                 handleMessageStatusEvent(payload, cursor: cursor)
 
+            case .keyboardCallback:
+                handleKeyboardCallbackEvent(payload, cursor: cursor)
+
             case .ack:
                 handleAck(payload)
                 
@@ -494,6 +497,22 @@ internal final class WssRealtimeTransport: NSObject, RealtimeTransport, URLSessi
 
         } catch {
             logger.warning("Failed to decode message status event: \(error)")
+        }
+    }
+
+
+    private func handleKeyboardCallbackEvent(
+        _ payload: [String: Any],
+        cursor: String?
+    ) {
+        do {
+            let data = try eventData(payload, event: .keyboardCallback)
+            let dto = try jsonDecoder.decode(KeyboardCallbackEventDto.self, from: data)
+
+            observer?.onKeyboardCallback(dto, cursor: cursor)
+
+        } catch {
+            logger.warning("Failed to decode keyboard callback event: \(error)")
         }
     }
 

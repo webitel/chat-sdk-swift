@@ -62,7 +62,7 @@ public enum MessageContent: Hashable, Codable  {
         /// Optional interactive keyboard.
         ///
         /// Usually provided by the server.
-        public let keyboard: ChatKeyboard?
+        public internal(set) var keyboard: ChatKeyboard?
     }
 
     /// Contact payload.
@@ -172,6 +172,29 @@ public extension MessageContent {
 
         default:
             return []
+        }
+    }
+}
+
+
+public extension MessageContent {
+    /// Applies a keyboard selection from `MessageEvent.keyboardSelected`.
+    ///
+    /// Updates the keyboard of `.keyboard` and `.composite` content; no-op for content without a keyboard.
+    /// Use it when the app stores the message content rather than the whole `Message`.
+    mutating func applyKeyboardSelection(_ selection: ChatKeyboardReaction) {
+        switch self {
+        case .keyboard(var keyboard):
+            keyboard.applySelection(selection)
+            self = .keyboard(keyboard)
+
+        case .composite(var composite):
+            guard composite.keyboard != nil else { return }
+            composite.keyboard?.applySelection(selection)
+            self = .composite(composite)
+
+        default:
+            return
         }
     }
 }

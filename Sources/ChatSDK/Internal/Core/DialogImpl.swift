@@ -372,6 +372,14 @@ internal final class DialogImpl: Dialog {
     }
 
 
+    func applyKeyboardSelection(messageId: String, selection: ChatKeyboardReaction) {
+        withState { state in
+            guard state.lastMessage?.id == messageId else { return }
+            state.lastMessage?.applyKeyboardSelection(selection)
+        }
+    }
+
+
     func applyDeletion(messageId: String, deletion: MessageDeletion) {
         withState { state in
             guard state.lastMessage?.id == messageId else { return }

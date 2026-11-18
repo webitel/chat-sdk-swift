@@ -922,6 +922,28 @@ extension DefaultChatClient: RealtimeObserver {
     }
 
 
+    func onKeyboardCallback(_ dto: KeyboardCallbackEventDto, cursor: String?) {
+        synchronizer.submit(cursor: cursor) { [weak self] in
+            guard let self else { return }
+
+            let selection = dto.selection.toDomain()
+
+            self.dialogFactory.get(dto.dialogId)?
+                .applyKeyboardSelection(messageId: dto.messageId, selection: selection)
+
+            self.hub.dispatch(
+                ChatEvent.message(
+                    MessageEvent.keyboardSelected(
+                        dialogId: dto.dialogId,
+                        messageId: dto.messageId,
+                        selection: selection
+                    )
+                )
+            )
+        }
+    }
+
+
     func onMessageEdited(_ dto: MessageEditedEventDto, cursor: String?) {
         synchronizer.submit(cursor: cursor) { [weak self] in
             guard let self else { return }

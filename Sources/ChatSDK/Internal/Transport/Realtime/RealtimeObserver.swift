@@ -18,6 +18,7 @@ internal protocol RealtimeObserver: AnyObject {
     func onMessageDeleted(_ event: MessageDeletedEventDto, cursor: String?)
     func onMessageEdited(_ event: MessageEditedEventDto, cursor: String?)
     func onMessageStatus(_ event: MessageStatusEventDto, cursor: String?)
+    func onKeyboardCallback(_ event: KeyboardCallbackEventDto, cursor: String?)
     func onNewDialog(_ dialog: DialogDto, cursor: String?)
     func onConnectedEvent(cursor: String?)
     func onError(_ error: ChatError)

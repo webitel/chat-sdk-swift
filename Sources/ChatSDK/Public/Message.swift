@@ -26,7 +26,10 @@ public struct Message: Hashable, Codable {
     public let from: Participant
 
     /// Message content.
-    public let content: MessageContent
+    ///
+    /// The keyboard selection is updated in place on `MessageEvent.keyboardSelected`
+    /// via `applyKeyboardSelection(_:)`.
+    public internal(set) var content: MessageContent
 
     /// Client-generated request ID
     public let sendId: String?
@@ -105,5 +108,13 @@ public extension Message {
     /// Indicates whether the message was deleted.
     var isDeleted: Bool {
         deletion != nil
+    }
+
+    /// Applies a keyboard selection from `MessageEvent.keyboardSelected`.
+    ///
+    /// Updates the selection of the message keyboard (`.keyboard` or `.composite` content);
+    /// no-op if the message has no keyboard.
+    mutating func applyKeyboardSelection(_ selection: ChatKeyboardReaction) {
+        content.applyKeyboardSelection(selection)
     }
 }

@@ -59,12 +59,22 @@ public enum MessageEvent {
         reactions: [MessageReaction]
     )
 
+    /// A keyboard button of the message was pressed.
+    ///
+    /// Apply it to a locally stored message with `Message.applyKeyboardSelection(_:)`.
+    case keyboardSelected(
+        dialogId: String,
+        messageId: String,
+        selection: ChatKeyboardReaction
+    )
+
     var dialogId: String {
         switch self {
         case .received(let id, _),
              .edited(let id, _),
              .deleted(let id, _, _),
-             .reactionsChanged(let id, _, _):
+             .reactionsChanged(let id, _, _),
+             .keyboardSelected(let id, _, _):
             return id
         }
     }

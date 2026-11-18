@@ -26,7 +26,7 @@ public enum ChatKeyboard: Hashable, Codable {
         public let rows: [ChatKeyboardRow]
         
         /// Information about the selected button, if any.
-        public let selection: ChatKeyboardReaction?
+        public internal(set) var selection: ChatKeyboardReaction?
     }
 
     public struct ListMenu: Hashable, Codable {
@@ -40,7 +40,22 @@ public enum ChatKeyboard: Hashable, Codable {
         public let sections: [ChatKeyboardSection]
         
         /// Information about the selected button in this menu, if any.
-        public let selection: ChatKeyboardReaction?
+        public internal(set) var selection: ChatKeyboardReaction?
+    }
+}
+
+
+internal extension ChatKeyboard {
+    mutating func applySelection(_ selection: ChatKeyboardReaction) {
+        switch self {
+        case .buttons(var buttons):
+            buttons.selection = selection
+            self = .buttons(buttons)
+
+        case .listMenu(var menu):
+            menu.selection = selection
+            self = .listMenu(menu)
+        }
     }
 }
 

@@ -19,6 +19,7 @@ internal enum RealtimeEventType: String, CaseIterable {
     case messageDeleted = "message_deleted_event"
     case messageEdited = "message_edited_event"
     case messageStatus = "message_status_event"
+    case keyboardCallback = "interactive_callback_event"
     case ack = "ack_event"
     case error = "error_event"
     case ping = "ping_event"
