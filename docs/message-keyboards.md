@@ -213,3 +213,31 @@ Fields:
 - `messageId` — identifier of the related message
 - `buttonId` — identifier of the clicked button
 - `data` — callback payload associated with the button
+
+
+## Button Selection Updates
+
+When a keyboard button is pressed (by the current user on any device, or by another participant), the SDK dispatches `MessageEvent.keyboardSelected`:
+
+```swift
+case keyboardSelected(
+    dialogId: String,
+    messageId: String,
+    selection: ChatKeyboardReaction
+)
+```
+
+`selection` has the same shape as `ChatKeyboard.Buttons.selection` / `ChatKeyboard.ListMenu.selection` returned in the history (`buttonCode`, `callbackData`, `reactedAt`, `reactedBy`).
+
+The SDK does not store the message history, so apply the selection to the locally stored message with `Message.applyKeyboardSelection(_:)`. It updates the keyboard of `.keyboard` and `.composite` content and does nothing for other content:
+
+```swift
+case .message(.keyboardSelected(_, let messageId, let selection)):
+    if let index = messages.firstIndex(where: { $0.id == messageId }) {
+        messages[index].applyKeyboardSelection(selection)
+    }
+```
+
+If the app stores only the message content, use `MessageContent.applyKeyboardSelection(_:)` instead — it works the same way.
+
+The dialog's cached `lastMessage` is updated automatically if the selection belongs to the last message. `Message.content` and `selection` are read-only for the client; use `applyKeyboardSelection(_:)` to update them.

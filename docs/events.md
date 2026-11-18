@@ -78,6 +78,12 @@ enum MessageEvent {
         messageId: String,
         reactions: [MessageReaction]
     )
+
+    case keyboardSelected(
+        dialogId: String,
+        messageId: String,
+        selection: ChatKeyboardReaction
+    )
 }
 ```
 
@@ -106,6 +112,8 @@ case .message(.received(let dialogId, _)):
 ```
 
 See [Reactions](reactions.md) for details on `.reactionsChanged`.
+
+`.keyboardSelected` is dispatched when a keyboard button of a message is pressed. Apply it to a stored message with `message.applyKeyboardSelection(selection)`; see [Interactive Messages](message-keyboards.md#button-selection-updates).
 
 ### Dialog events
 
